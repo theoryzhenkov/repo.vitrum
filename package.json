@@ -1,0 +1,16 @@
+{
+  "name": "vitrum",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w vitrum-extension",
+    "build": "npm run build -w vitrum-extension",
+    "zip": "npm run zip -w vitrum-extension",
+    "test": "npm run test -w @vitrum/anchoring",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}

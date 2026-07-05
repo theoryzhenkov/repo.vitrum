@@ -1,0 +1,6 @@
+# Build output (.output/) is tracked deliberately so the demo build ships with the repo.
+node_modules/
+.wxt/
+dist/
+*.log
+.DS_Store

@@ -22,9 +22,10 @@ import { flashRange, paintHighlights } from './highlightPainter';
 import { collectSeedCandidates, describeElementForDisplay, pageExcerpt } from './pageUtils';
 import type { PendingTarget, Rect, StreamState } from './types';
 import { rectOf } from './types';
+import { Avatar } from './components/Avatar';
 import { Composer } from './components/Composer';
-import { ElementBadges, type BadgeInfo } from './components/ElementBadges';
 import { ElementPicker } from './components/ElementPicker';
+import { InlinePills, participantLabel, type PillInfo } from './components/InlinePills';
 import { SelectionPopover } from './components/SelectionPopover';
 import { Sidebar } from './components/Sidebar';
 import { ThreadPopover } from './components/ThreadPopover';
@@ -419,14 +420,37 @@ export function App() {
   // -------------------------------------------------------------- render
 
   const roots = state.annotations.filter((a) => a.parentId === null);
-  const badges: BadgeInfo[] = roots.flatMap((root) => {
+
+  const pills: PillInfo[] = roots.flatMap((root) => {
     const result = anchored.get(root.id);
-    if (!result || result.kind !== 'element') return [];
-    const author = usersById.get(root.authorId);
-    if (!author) return [];
-    const count = 1 + state.annotations.filter((a) => a.parentId === root.id).length;
-    return [{ rootAnnotation: root, element: result.element, author, count }];
+    if (!result) return [];
+    const authorIds = [
+      root.authorId,
+      ...state.annotations.filter((a) => a.parentId === root.id).map((a) => a.authorId),
+    ];
+    const participants: User[] = [];
+    for (const authorId of authorIds) {
+      const user = usersById.get(authorId);
+      if (user && !participants.some((p) => p.id === user.id)) participants.push(user);
+    }
+    if (participants.length === 0) return [];
+    // Your own bare highlight is just a tint — a "You" pill on it is noise.
+    // Elements always get one; it's their only marker.
+    const isOwnBareHighlight =
+      result.kind === 'text' &&
+      participants.length === 1 &&
+      participants[0]!.id === 'me' &&
+      !root.body &&
+      authorIds.length === 1;
+    if (isOwnBareHighlight) return [];
+    return [{ root, anchored: result, participants }];
   });
+
+  const pageParticipants: User[] = [];
+  for (const a of state.annotations) {
+    const user = usersById.get(a.authorId);
+    if (user && !pageParticipants.some((p) => p.id === user.id)) pageParticipants.push(user);
+  }
 
   const activeRoot = activeThread ? roots.find((a) => a.id === activeThread) ?? null : null;
   const activeRect: Rect = (() => {
@@ -463,7 +487,7 @@ export function App() {
       )}
       {picker && <ElementPicker onPick={onElementPicked} onCancel={() => setPicker(false)} />}
 
-      <ElementBadges badges={badges} onOpen={(annotationId) => openThread(annotationId, false)} />
+      <InlinePills pills={pills} onOpen={(annotationId) => openThread(annotationId, false)} />
 
       {activeRoot && (
         <ThreadPopover
@@ -487,9 +511,15 @@ export function App() {
         />
       )}
 
-      {!sidebarOpen && roots.length > 0 && (
-        <button className="vt-presence" onClick={() => setSidebarOpen(true)} title="Annotations on this page (Alt+V)">
-          <Diamond size={11} /> {roots.length}
+      {!sidebarOpen && pageParticipants.length > 0 && (
+        <button className="vt-presence" onClick={() => setSidebarOpen(true)} title="See annotations (Alt+V)">
+          <Diamond size={11} />
+          <span className="vt-pill-avatars">
+            {pageParticipants.slice(0, 4).map((u) => (
+              <Avatar key={u.id} user={u} size={16} />
+            ))}
+          </span>
+          <span className="vt-presence-label">{participantLabel(pageParticipants)}</span>
         </button>
       )}
 

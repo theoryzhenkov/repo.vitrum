@@ -343,20 +343,57 @@ button {
   box-shadow: var(--vt-shadow);
 }
 
-/* --------------------------------------------------- dots & presence */
-.vt-dot {
+/* ------------------------------------------- participant pills & presence */
+.vt-pill {
   position: fixed;
   z-index: 2147483080;
-  width: 14px;
-  height: 14px;
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--vt-line);
   border-radius: 999px;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 6px rgba(20, 20, 35, 0.3);
-  transition: transform 0.1s ease;
+  padding: 2px 3px;
+  box-shadow: 0 1px 6px rgba(20, 20, 35, 0.16);
+  transition: box-shadow 0.12s ease;
 }
 
-.vt-dot:hover {
-  transform: scale(1.35);
+.vt-pill:hover {
+  box-shadow: 0 3px 14px rgba(20, 20, 35, 0.22);
+  z-index: 2147483085;
+}
+
+.vt-pill-avatars {
+  display: inline-flex;
+  align-items: center;
+}
+
+.vt-pill-avatars .vt-avatar {
+  border: 1.5px solid #fff;
+  margin-left: -5px;
+}
+
+.vt-pill-avatars .vt-avatar:first-child {
+  margin-left: 0;
+}
+
+.vt-pill-label,
+.vt-presence-label {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--vt-ink-2);
+  transition: max-width 0.18s ease, margin 0.18s ease, opacity 0.15s ease;
+  opacity: 0;
+}
+
+.vt-pill-open .vt-pill-label,
+.vt-presence:hover .vt-presence-label {
+  max-width: 200px;
+  margin-left: 5px;
+  margin-right: 4px;
+  opacity: 1;
 }
 
 .vt-presence {
@@ -366,23 +403,20 @@ button {
   z-index: 2147483090;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(6px);
   border: 1px solid var(--vt-line);
   border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 11.5px;
-  font-weight: 650;
+  padding: 3px 8px;
   color: var(--vt-accent);
   box-shadow: 0 2px 12px rgba(20, 20, 35, 0.1);
-  opacity: 0.75;
-  transition: opacity 0.15s ease, transform 0.12s ease;
+  opacity: 0.8;
+  transition: opacity 0.15s ease;
 }
 
 .vt-presence:hover {
   opacity: 1;
-  transform: translateY(1px);
 }
 
 .vt-flash-box {

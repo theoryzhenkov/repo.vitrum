@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Diamond } from 'lucide-react';
 import type { LlmProvider, LlmSettings } from '@vitrum/model';
 import { DEFAULT_LLM_SETTINGS } from '@vitrum/model';
 import { send } from '@/lib/messages';
@@ -61,7 +62,7 @@ export function OptionsApp() {
     <div className="wrap">
       <header>
         <h1>
-          <span className="glyph">◈</span> Vitrum
+          <Diamond size={20} className="glyph" /> Vitrum
         </h1>
         <p className="sub">
           Agents run on your own key, straight from this browser to the API you choose. Nothing is stored

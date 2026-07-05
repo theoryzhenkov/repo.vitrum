@@ -1,0 +1,148 @@
+* {
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, 'Helvetica Neue', sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f6f6fa;
+  color: #1b1b22;
+}
+
+.wrap {
+  max-width: 640px;
+  margin: 44px auto;
+  padding: 0 20px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.glyph {
+  color: #6d5ce7;
+}
+
+.icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: #6b6b76;
+  cursor: pointer;
+}
+
+.icon-link:hover {
+  background: #ececf3;
+  color: #1b1b22;
+}
+
+.icon-link.danger:hover {
+  color: #c92a2a;
+  background: #fdecec;
+}
+
+.list {
+  background: #fff;
+  border: 1px solid #ececf1;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 12px rgba(20, 20, 35, 0.05);
+}
+
+.list-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+h2 {
+  font-size: 14.5px;
+  margin: 0;
+}
+
+.count {
+  font-size: 11px;
+  font-weight: 700;
+  background: #efedff;
+  color: #6d5ce7;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.list-head .icon-link {
+  margin-left: auto;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 4px;
+  border-top: 1px solid #f3f3f7;
+}
+
+.item-kind {
+  color: #6b6b76;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.item-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: #1b1b22;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-title:hover {
+  color: #6d5ce7;
+}
+
+.item-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #6b6b76;
+}
+
+.empty {
+  text-align: center;
+  color: #6b6b76;
+  font-size: 13.5px;
+  padding: 60px 0;
+}
+
+.hint {
+  font-size: 12.5px;
+  margin-top: 8px;
+}
+
+kbd {
+  background: #ececf3;
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-family: inherit;
+}

@@ -1,63 +1,44 @@
-import { useEffect, useState } from 'react';
-import type { Annotation, List, User } from '@vitrum/model';
-import { send, type LibraryState, type PageState } from '@/lib/messages';
-import type { StreamState } from '../types';
+import { useState } from 'react';
+import {
+  Bookmark,
+  BookmarkCheck,
+  Diamond,
+  Ellipsis,
+  Library,
+  Settings,
+  Sprout,
+  SquareDashedMousePointer,
+  X,
+} from 'lucide-react';
+import type { Annotation, User } from '@vitrum/model';
+import { send, type PageState } from '@/lib/messages';
+import { timeAgo } from '@/lib/util';
+import { Avatar } from './Avatar';
 import { SaveMenu } from './SaveMenu';
-import { ThreadCard } from './ThreadCard';
 
 interface Props {
   open: boolean;
-  pageTitle: string;
-  pageUrl: string;
   state: PageState;
   anchoredIds: Set<string>;
-  streams: StreamState[];
-  activeThread: string | null;
   onClose: () => void;
-  onJump: (annotationId: string) => void;
-  onReply: (root: Annotation, body: string) => void;
-  onDelete: (annotationId: string) => void;
+  onOpenThread: (annotationId: string) => void;
   onSavePage: (listId: string) => void;
   onCreateListAndSavePage: (name: string) => void;
   onPickElement: () => void;
   onSeedDemo: () => void;
 }
 
+/** Slim per-page index: header icons + a list of thread rows. Interaction happens inline on the page. */
 export function Sidebar(props: Props) {
-  const [tab, setTab] = useState<'page' | 'library'>('page');
   const [saveOpen, setSaveOpen] = useState(false);
-  const [library, setLibrary] = useState<LibraryState | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const users = new Map(props.state.users.map((u) => [u.id, u] as const));
   const roots = props.state.annotations
     .filter((a) => a.parentId === null)
     .sort((a, b) => b.createdAt - a.createdAt);
-  const repliesByRoot = new Map<string, Annotation[]>();
-  for (const a of props.state.annotations) {
-    if (!a.parentId) continue;
-    const bucket = repliesByRoot.get(a.parentId) ?? [];
-    bucket.push(a);
-    repliesByRoot.set(a.parentId, bucket);
-  }
-
-  useEffect(() => {
-    if (tab === 'library' && props.open) {
-      send('library:get', {}).then(setLibrary).catch(() => setLibrary(null));
-    }
-  }, [tab, props.open]);
-
-  useEffect(() => {
-    if (props.activeThread) {
-      setTab('page');
-      // Wait for the tab content to render, then bring the card into view.
-      requestAnimationFrame(() => {
-        document
-          .querySelector('vitrum-ui')
-          ?.shadowRoot?.getElementById(`vt-thread-${props.activeThread}`)
-          ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      });
-    }
-  }, [props.activeThread]);
+  const replyCount = (rootId: string) =>
+    props.state.annotations.filter((a) => a.parentId === rootId).length;
 
   const pageSaved = props.state.itemsForPage.some((i) => i.annotationId === null);
 
@@ -65,25 +46,19 @@ export function Sidebar(props: Props) {
     <aside className={`vt-sidebar${props.open ? ' vt-open' : ''}`} data-vitrum-ui="1">
       <header className="vt-side-header">
         <span className="vt-wordmark">
-          <span className="vt-wordmark-glyph">◈</span> Vitrum
+          <Diamond size={13} className="vt-wordmark-glyph" /> Vitrum
         </span>
-        <button className="vt-icon-btn" onClick={props.onClose} title="Close (Alt+V)">
-          ×
-        </button>
-      </header>
-
-      <div className="vt-page-card">
-        <div className="vt-page-title" title={props.pageTitle}>
-          {props.pageTitle || 'Untitled page'}
-        </div>
-        <div className="vt-page-host">{hostOf(props.pageUrl)}</div>
-        <div className="vt-page-actions">
+        <div className="vt-header-actions">
           <div className="vt-save-anchor">
             <button
-              className={`vt-btn ${pageSaved ? 'vt-btn-saved' : 'vt-btn-primary'}`}
-              onClick={() => setSaveOpen((v) => !v)}
+              className={`vt-icon-btn${pageSaved ? ' vt-icon-on' : ''}`}
+              title={pageSaved ? 'Page saved' : 'Save page to a list'}
+              onClick={() => {
+                setSaveOpen((v) => !v);
+                setMenuOpen(false);
+              }}
             >
-              {pageSaved ? '✓ Saved' : '🔖 Save page'}
+              {pageSaved ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
             </button>
             {saveOpen && (
               <SaveMenu
@@ -94,108 +69,107 @@ export function Sidebar(props: Props) {
               />
             )}
           </div>
-          <button className="vt-btn vt-btn-ghost" onClick={props.onPickElement} title="Alt+E">
-            ⌖ Element
+          <button className="vt-icon-btn" title="Annotate an element (Alt+E)" onClick={props.onPickElement}>
+            <SquareDashedMousePointer size={15} />
+          </button>
+          <div className="vt-save-anchor">
+            <button
+              className="vt-icon-btn"
+              title="More"
+              onClick={() => {
+                setMenuOpen((v) => !v);
+                setSaveOpen(false);
+              }}
+            >
+              <Ellipsis size={15} />
+            </button>
+            {menuOpen && (
+              <div className="vt-menu">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    void send('open-library', {});
+                  }}
+                >
+                  <Library size={13} /> Library
+                </button>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    props.onSeedDemo();
+                  }}
+                >
+                  <Sprout size={13} /> Seed demo
+                </button>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    void send('open-options', {});
+                  }}
+                >
+                  <Settings size={13} /> Settings
+                </button>
+              </div>
+            )}
+          </div>
+          <button className="vt-icon-btn" onClick={props.onClose} title="Close (Alt+V)">
+            <X size={15} />
           </button>
         </div>
-      </div>
-
-      <nav className="vt-tabs">
-        <button className={`vt-tab${tab === 'page' ? ' vt-active' : ''}`} onClick={() => setTab('page')}>
-          This page {roots.length > 0 && <span className="vt-tab-count">{roots.length}</span>}
-        </button>
-        <button className={`vt-tab${tab === 'library' ? ' vt-active' : ''}`} onClick={() => setTab('library')}>
-          Library
-        </button>
-      </nav>
+      </header>
 
       <div className="vt-side-body">
-        {tab === 'page' ? (
-          roots.length === 0 ? (
-            <div className="vt-empty">
-              <p>Nothing here yet.</p>
-              <p className="vt-empty-hint">
-                Select any text to highlight or comment, or press <kbd>Alt+E</kbd> to annotate an element.
-                Mention <b>@skeptic</b>, <b>@librarian</b>, or <b>@eli5</b> to bring an agent into the margin.
-              </p>
-            </div>
-          ) : (
-            roots.map((root) => (
-              <ThreadCard
-                key={root.id}
-                root={root}
-                replies={(repliesByRoot.get(root.id) ?? []).sort((a, b) => a.createdAt - b.createdAt)}
-                users={users}
-                streams={props.streams.filter((s) => s.parentId === root.id)}
-                active={props.activeThread === root.id}
-                anchored={props.anchoredIds.has(root.id)}
-                onJump={() => props.onJump(root.id)}
-                onReply={(body) => props.onReply(root, body)}
-                onDelete={props.onDelete}
-              />
-            ))
-          )
+        {roots.length === 0 ? (
+          <div className="vt-empty">
+            <p>Nothing on this page yet.</p>
+            <p className="vt-empty-hint">
+              Select text to highlight or comment. Mention <b>@skeptic</b>, <b>@librarian</b>, or <b>@eli5</b> to
+              bring an agent in.
+            </p>
+          </div>
         ) : (
-          <LibraryView library={library} />
+          roots.map((root) => (
+            <ThreadRow
+              key={root.id}
+              root={root}
+              users={users}
+              replies={replyCount(root.id)}
+              anchored={props.anchoredIds.has(root.id)}
+              onOpen={() => props.onOpenThread(root.id)}
+            />
+          ))
         )}
       </div>
-
-      <footer className="vt-side-footer">
-        <button className="vt-footer-link" onClick={props.onSeedDemo} title="Stage friend activity on this page">
-          Seed demo
-        </button>
-        <button className="vt-footer-link" onClick={() => void send('open-options', {})}>
-          Settings
-        </button>
-      </footer>
     </aside>
   );
 }
 
-function LibraryView({ library }: { library: LibraryState | null }) {
-  if (!library) return <div className="vt-empty">Loading…</div>;
-  if (library.items.length === 0) {
-    return (
-      <div className="vt-empty">
-        <p>Your library is empty.</p>
-        <p className="vt-empty-hint">Save pages or clips into lists and they will show up here.</p>
-      </div>
-    );
-  }
-  const byList = new Map<string, typeof library.items>();
-  for (const item of library.items) {
-    const bucket = byList.get(item.listId) ?? [];
-    bucket.push(item);
-    byList.set(item.listId, bucket);
-  }
+function ThreadRow({
+  root,
+  users,
+  replies,
+  anchored,
+  onOpen,
+}: {
+  root: Annotation;
+  users: Map<string, User>;
+  replies: number;
+  anchored: boolean;
+  onOpen: () => void;
+}) {
+  const author = users.get(root.authorId);
   return (
-    <div>
-      {library.lists.map((list: List) => {
-        const items = byList.get(list.id) ?? [];
-        if (items.length === 0) return null;
-        return (
-          <div className="vt-lib-list" key={list.id}>
-            <div className="vt-lib-name">
-              {list.name} <span className="vt-tab-count">{items.length}</span>
-            </div>
-            {items.map((item) => (
-              <button className="vt-lib-item" key={item.id} onClick={() => window.open(item.pageUrl, '_blank')}>
-                <span className="vt-lib-kind">{item.annotationId ? '❝' : '📄'}</span>
-                <span className="vt-lib-title">{item.pageTitle || item.pageUrl}</span>
-                <span className="vt-lib-host">{hostOf(item.pageUrl)}</span>
-              </button>
-            ))}
-          </div>
-        );
-      })}
-    </div>
+    <button className="vt-row" onClick={onOpen}>
+      {author && <Avatar user={author} size={22} />}
+      <span className="vt-row-main">
+        {root.quote && <span className="vt-row-quote">{root.quote}</span>}
+        {root.body && <span className="vt-row-body">{root.body}</span>}
+        <span className="vt-row-meta">
+          {author?.name ?? 'Unknown'} · {timeAgo(root.createdAt)}
+          {replies > 0 && ` · ${replies} ${replies === 1 ? 'reply' : 'replies'}`}
+          {!anchored && <span className="vt-orphan-tag">page changed</span>}
+        </span>
+      </span>
+    </button>
   );
-}
-
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return url;
-  }
 }

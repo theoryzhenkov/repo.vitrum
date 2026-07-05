@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Diamond } from 'lucide-react';
 import type { Annotation, User } from '@vitrum/model';
 import {
   anchorTarget,
@@ -26,6 +27,7 @@ import { ElementBadges, type BadgeInfo } from './components/ElementBadges';
 import { ElementPicker } from './components/ElementPicker';
 import { SelectionPopover } from './components/SelectionPopover';
 import { Sidebar } from './components/Sidebar';
+import { ThreadPopover } from './components/ThreadPopover';
 
 const EMPTY_STATE: PageState = { annotations: [], users: [], lists: [], itemsForPage: [] };
 
@@ -137,6 +139,7 @@ export function App() {
         const range = selection.getRangeAt(0);
         const target = describeTextRange(document.body, range);
         if (!target) return;
+        setActiveThread(null);
         setSel({
           kind: 'text',
           target,
@@ -150,6 +153,7 @@ export function App() {
       if (e.composedPath().some(isOurNode)) return;
       setSel(null);
       setComposing(false);
+      setActiveThread(null);
     }
     document.addEventListener('mouseup', onMouseUp);
     document.addEventListener('mousedown', onMouseDown);
@@ -159,7 +163,7 @@ export function App() {
     };
   }, [picker]);
 
-  // ---- Click on a painted highlight opens its thread.
+  // ---- Click on a painted highlight opens its thread inline.
   useEffect(() => {
     function onClick(e: MouseEvent) {
       if (picker || e.composedPath().some(isOurNode)) return;
@@ -170,7 +174,7 @@ export function App() {
         if (!result || result.kind !== 'text') continue;
         for (const rect of Array.from(result.range.getClientRects())) {
           if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-            setSidebarOpen(true);
+            setSel(null);
             setActiveThread(a.parentId ?? a.id);
             return;
           }
@@ -181,13 +185,14 @@ export function App() {
     return () => document.removeEventListener('click', onClick);
   }, [anchored, picker]);
 
-  // ---- Escape unwinds UI layers; scroll/resize re-render badges.
+  // ---- Escape unwinds UI layers; scroll/resize re-render anchored positions.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
       if (picker) setPicker(false);
       else if (composing) setComposing(false);
       else if (sel) setSel(null);
+      else if (activeThread) setActiveThread(null);
       else if (sidebarOpen) setSidebarOpen(false);
     }
     let raf = 0;
@@ -204,7 +209,7 @@ export function App() {
       window.removeEventListener('resize', onScrollOrResize);
       cancelAnimationFrame(raf);
     };
-  }, [picker, composing, sel, sidebarOpen]);
+  }, [picker, composing, sel, activeThread, sidebarOpen]);
 
   // ------------------------------------------------------------- actions
 
@@ -261,7 +266,6 @@ export function App() {
         })),
       };
       port.postMessage(invoke);
-      setSidebarOpen(true);
       setActiveThread(root.id);
     },
     [pageUrl, usersById, refresh, notify],
@@ -289,9 +293,8 @@ export function App() {
       setSel(null);
       window.getSelection()?.removeAllRanges();
       await refresh();
-      for (const agent of mentionedAgents(body)) invokeAgent(agent, root, body.trim(), []);
-      setSidebarOpen(true);
       setActiveThread(root.id);
+      for (const agent of mentionedAgents(body)) invokeAgent(agent, root, body.trim(), []);
     },
     [newAnnotation, refresh, mentionedAgents, invokeAgent],
   );
@@ -363,22 +366,21 @@ export function App() {
   const deleteAnnotation = useCallback(
     async (annotationId: string) => {
       await send('annotation:delete', { id: annotationId });
+      if (annotationId === activeThread) setActiveThread(null);
       await refresh();
     },
-    [refresh],
+    [refresh, activeThread],
   );
 
-  const jumpTo = useCallback(
-    (annotationId: string) => {
-      const result = anchored.get(annotationId);
-      if (!result) {
-        notify('The page changed — original location not found');
-        return;
-      }
+  /** Open a thread inline; from the sidebar this also scrolls the page to it. */
+  const openThread = useCallback(
+    (annotationId: string, scroll: boolean) => {
+      setSidebarOpen(false);
       setActiveThread(annotationId);
+      const result = anchored.get(annotationId);
+      if (!result || !scroll) return;
       if (result.kind === 'text') {
-        const el = result.range.startContainer.parentElement;
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        result.range.startContainer.parentElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         flashRange(result.range);
       } else {
         result.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -388,11 +390,12 @@ export function App() {
         }, 450);
       }
     },
-    [anchored, notify],
+    [anchored],
   );
 
   const onElementPicked = useCallback((el: Element) => {
     setPicker(false);
+    setActiveThread(null);
     setSel({
       kind: 'element',
       target: describeElement(document.body, el),
@@ -425,6 +428,15 @@ export function App() {
     return [{ rootAnnotation: root, element: result.element, author, count }];
   });
 
+  const activeRoot = activeThread ? roots.find((a) => a.id === activeThread) ?? null : null;
+  const activeRect: Rect = (() => {
+    if (!activeRoot) return { x: 0, y: 0, width: 0, height: 0 };
+    const result = anchored.get(activeRoot.id);
+    if (result?.kind === 'text') return rectOf(result.range.getBoundingClientRect());
+    if (result?.kind === 'element') return rectOf(result.element.getBoundingClientRect());
+    return { x: window.innerWidth / 2 - 158, y: 64, width: 316, height: 0 }; // orphan: top-center
+  })();
+
   return (
     <>
       {sel && !composing && (
@@ -451,13 +463,22 @@ export function App() {
       )}
       {picker && <ElementPicker onPick={onElementPicked} onCancel={() => setPicker(false)} />}
 
-      <ElementBadges
-        badges={badges}
-        onOpen={(annotationId) => {
-          setSidebarOpen(true);
-          setActiveThread(annotationId);
-        }}
-      />
+      <ElementBadges badges={badges} onOpen={(annotationId) => openThread(annotationId, false)} />
+
+      {activeRoot && (
+        <ThreadPopover
+          root={activeRoot}
+          replies={state.annotations
+            .filter((a) => a.parentId === activeRoot.id)
+            .sort((a, b) => a.createdAt - b.createdAt)}
+          users={usersById}
+          streams={streams.filter((s) => s.parentId === activeRoot.id)}
+          rect={activeRect}
+          onReply={(body) => void submitReply(activeRoot, body)}
+          onDelete={(annotationId) => void deleteAnnotation(annotationId)}
+          onClose={() => setActiveThread(null)}
+        />
+      )}
 
       {flashRect && (
         <div
@@ -466,24 +487,18 @@ export function App() {
         />
       )}
 
-      {!sidebarOpen && (
-        <button className="vt-edge-tab" onClick={() => setSidebarOpen(true)} title="Open Vitrum (Alt+V)">
-          ◈{roots.length > 0 && <span className="vt-edge-count">{roots.length}</span>}
+      {!sidebarOpen && roots.length > 0 && (
+        <button className="vt-presence" onClick={() => setSidebarOpen(true)} title="Annotations on this page (Alt+V)">
+          <Diamond size={11} /> {roots.length}
         </button>
       )}
 
       <Sidebar
         open={sidebarOpen}
-        pageTitle={document.title}
-        pageUrl={pageUrl}
         state={state}
         anchoredIds={new Set(anchored.keys())}
-        streams={streams}
-        activeThread={activeThread}
         onClose={() => setSidebarOpen(false)}
-        onJump={jumpTo}
-        onReply={(root, body) => void submitReply(root, body)}
-        onDelete={(annotationId) => void deleteAnnotation(annotationId)}
+        onOpenThread={(annotationId) => openThread(annotationId, true)}
         onSavePage={(listId) => void saveTarget(listId, null)}
         onCreateListAndSavePage={(name) => void createListAndSave(name, null)}
         onPickElement={() => {

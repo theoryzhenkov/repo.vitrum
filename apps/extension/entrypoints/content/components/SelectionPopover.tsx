@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Bookmark, Highlighter, MessageCircle } from 'lucide-react';
 import type { List } from '@vitrum/model';
 import { clamp } from '@/lib/util';
 import type { PendingTarget } from '../types';
@@ -14,7 +15,7 @@ interface Props {
   onDismiss: () => void;
 }
 
-/** The floating toolbar that appears over a fresh selection or picked element. */
+/** Icon-only pill toolbar over a fresh selection / picked element. */
 export function SelectionPopover({
   pending,
   lists,
@@ -26,30 +27,25 @@ export function SelectionPopover({
 }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
 
-  const width = 252;
+  const width = saveOpen ? 200 : 118;
   const left = clamp(pending.rect.x + pending.rect.width / 2 - width / 2, 8, window.innerWidth - width - 8);
-  const top = clamp(pending.rect.y + pending.rect.height + 10, 8, window.innerHeight - 60);
+  const top = clamp(pending.rect.y + pending.rect.height + 8, 8, window.innerHeight - 52);
 
   return (
     <div className="vt-popover" style={{ left, top }} data-vitrum-ui="1">
       <div className="vt-popover-row">
         <button className="vt-pop-btn" onClick={onHighlight} title="Highlight">
-          <span className="vt-pop-swatch" /> Highlight
+          <Highlighter size={15} color="#e6a700" />
         </button>
-        <button className="vt-pop-btn" onClick={onComment} title="Comment / ask an agent">
-          💬 Comment
+        <button className="vt-pop-btn" onClick={onComment} title="Comment or ask an agent">
+          <MessageCircle size={15} />
         </button>
         <button className="vt-pop-btn" onClick={() => setSaveOpen((v) => !v)} title="Save to a list">
-          🔖 Save
+          <Bookmark size={15} />
         </button>
       </div>
       {saveOpen && (
-        <SaveMenu
-          lists={lists}
-          onSave={onSave}
-          onCreateAndSave={onCreateAndSave}
-          onClose={onDismiss}
-        />
+        <SaveMenu lists={lists} onSave={onSave} onCreateAndSave={onCreateAndSave} onClose={onDismiss} />
       )}
     </div>
   );

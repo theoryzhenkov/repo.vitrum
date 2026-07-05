@@ -107,6 +107,13 @@ const handlers: Handlers = {
     await db.listItems.delete(itemId);
   },
 
+  'list:delete': async ({ id: listId }) => {
+    await db.transaction('rw', db.lists, db.listItems, async () => {
+      await db.lists.delete(listId);
+      await db.listItems.where('listId').equals(listId).delete();
+    });
+  },
+
   'library:get': async () => {
     const [lists, items] = await Promise.all([
       db.lists.orderBy('createdAt').toArray(),
@@ -178,6 +185,10 @@ const handlers: Handlers = {
 
   'open-options': async () => {
     await browser.runtime.openOptionsPage();
+  },
+
+  'open-library': async () => {
+    await browser.tabs.create({ url: browser.runtime.getURL('/library.html') });
   },
 };
 

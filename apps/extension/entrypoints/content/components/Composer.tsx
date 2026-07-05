@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import type { User } from '@vitrum/model';
 import { clamp } from '@/lib/util';
 import type { PendingTarget } from '../types';
@@ -37,10 +38,9 @@ export function Composer({ pending, users, onSubmit, onCancel }: Props) {
           <button
             key={a.id}
             className="vt-agent-chip"
-            style={{ borderColor: a.color, color: a.color }}
             onClick={() => setBody((b) => (b.includes(`@${a.handle}`) ? b : `${b}${b && !b.endsWith(' ') ? ' ' : ''}@${a.handle} `))}
           >
-            ✦ @{a.handle}
+            <Sparkles size={10} /> @{a.handle}
           </button>
         ))}
       </div>

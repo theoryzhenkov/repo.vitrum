@@ -13,8 +13,8 @@ interface Props {
 }
 
 /**
- * Small anchored markers on element annotations. Positions are read fresh from
- * getBoundingClientRect on every render; the parent re-renders on scroll/resize.
+ * Minimal dot markers on annotated elements. Positions read fresh from
+ * getBoundingClientRect each render; the parent re-renders on scroll/resize.
  */
 export function ElementBadges({ badges, onOpen }: Props) {
   return (
@@ -26,17 +26,15 @@ export function ElementBadges({ badges, onOpen }: Props) {
         return (
           <button
             key={badge.rootAnnotation.id}
-            className="vt-badge"
+            className="vt-dot"
             style={{
-              left: Math.min(rect.right - 10, window.innerWidth - 34),
-              top: Math.max(rect.top - 10, 4),
+              left: Math.min(rect.right - 7, window.innerWidth - 22),
+              top: Math.max(rect.top - 7, 4),
               background: badge.author.color,
             }}
-            title={`Annotated by ${badge.author.name}`}
+            title={`${badge.author.name}${badge.count > 1 ? ` +${badge.count - 1}` : ''} — open thread`}
             onClick={() => onOpen(badge.rootAnnotation.id)}
-          >
-            💬{badge.count > 1 ? <span className="vt-badge-count">{badge.count}</span> : null}
-          </button>
+          />
         );
       })}
     </>

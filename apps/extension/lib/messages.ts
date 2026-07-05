@@ -29,12 +29,14 @@ export interface Protocol {
     res: ListItem;
   };
   'list:remove-item': { req: { id: string }; res: void };
+  'list:delete': { req: { id: string }; res: void };
   'library:get': { req: Record<string, never>; res: LibraryState };
   'seed:demo': { req: { pageUrl: string; pageTitle: string; seeds: SeedCandidate[] }; res: void };
   'settings:get': { req: Record<string, never>; res: LlmSettings };
   'settings:set': { req: { settings: LlmSettings }; res: void };
   'llm:test': { req: Record<string, never>; res: { ok: boolean; detail: string } };
   'open-options': { req: Record<string, never>; res: void };
+  'open-library': { req: Record<string, never>; res: void };
 }
 
 export type MessageType = keyof Protocol;

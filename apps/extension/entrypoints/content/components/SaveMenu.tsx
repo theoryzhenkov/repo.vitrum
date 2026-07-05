@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Plus } from 'lucide-react';
 import type { List } from '@vitrum/model';
 
 interface Props {
@@ -49,7 +50,7 @@ export function SaveMenu({ lists, onSave, onCreateAndSave, onClose }: Props) {
         </form>
       ) : (
         <button className="vt-save-item vt-save-create" onClick={() => setCreating(true)}>
-          ＋ New list…
+          <Plus size={13} /> New list…
         </button>
       )}
     </div>

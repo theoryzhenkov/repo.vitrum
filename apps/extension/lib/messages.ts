@@ -11,6 +11,8 @@ export interface PageState {
 export interface LibraryState {
   lists: List[];
   items: ListItem[];
+  /** Your root annotations (saves), newest first — the unfiled layer of the library. */
+  highlights: Annotation[];
 }
 
 export interface SeedCandidate {

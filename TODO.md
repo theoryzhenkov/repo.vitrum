@@ -6,9 +6,19 @@ press a shortcut, or the page already carries annotations.
 
 ## UX decisions (2026-07-05)
 
-- **Comments are inline.** Clicking a highlight or element badge opens a compact
-  thread card anchored at that spot — messages, reply box, @agent mentions, and
-  streaming replies all happen there. The conversation lives at the text.
+- **Capture first, elaborate later.** Selection (or Alt+E) shows a single
+  `Save` button — one click creates the highlight, silently. Comments, replies,
+  and list membership all happen afterward on the annotation's card. There are
+  no decisions at capture time.
+- **Pills live on a margin rail.** Participant pills sit in the whitespace
+  right of the highlight's containing block, aligned to its first line,
+  stacking downward on collision — never inline with text, so they can't
+  overlap it on any layout. Hovering a pill flashes its passage. Element pills
+  stay on corners. Own-only pills render dimmed (they're handles, not signals).
+- **One card does everything.** Clicking a pill (or highlight) opens the
+  anchored card: thread + streaming agents + composer + list chips (toggle to
+  add/remove, `+` to create). Unfiled saves show under "Highlights" in the
+  Library tab; lists are optional curation, not required folders.
 - **The sidebar is an index, not a home.** Alt+V shows a slim list of threads on
   the current page (quote · author · reply count); clicking one jumps to it and
   opens the inline card. Header carries four small icons: save page, annotate

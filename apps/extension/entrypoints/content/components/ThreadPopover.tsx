@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
-import type { Annotation, User } from '@vitrum/model';
+import { Plus, X } from 'lucide-react';
+import type { Annotation, List, ListItem, User } from '@vitrum/model';
 import { clamp, timeAgo } from '@/lib/util';
 import type { Rect, StreamState } from '../types';
 import { Avatar } from './Avatar';
@@ -13,17 +13,40 @@ interface Props {
   streams: StreamState[];
   /** Live rect of the anchored text/element this thread belongs to. */
   rect: Rect;
+  lists: List[];
+  /** List items on this page that reference the root annotation. */
+  items: ListItem[];
   onReply: (body: string) => void;
   onDelete: (annotationId: string) => void;
+  onToggleList: (listId: string, existing: ListItem | null) => void;
+  onCreateListAndSave: (name: string) => void;
   onClose: () => void;
 }
 
 const WIDTH = 316;
-const MAX_HEIGHT = 380;
+const MAX_HEIGHT = 420;
 
-/** Compact thread card anchored at the annotation — the conversation lives at the text. */
-export function ThreadPopover({ root, replies, users, streams, rect, onReply, onDelete, onClose }: Props) {
+/**
+ * The one surface for an annotation: quote context, thread (with streaming
+ * agent replies), composer, and list membership as toggle chips.
+ */
+export function ThreadPopover({
+  root,
+  replies,
+  users,
+  streams,
+  rect,
+  lists,
+  items,
+  onReply,
+  onDelete,
+  onToggleList,
+  onCreateListAndSave,
+  onClose,
+}: Props) {
   const [draft, setDraft] = useState('');
+  const [creatingList, setCreatingList] = useState(false);
+  const [newListName, setNewListName] = useState('');
   const userList = [...users.values()];
 
   const left = clamp(rect.x, 12, window.innerWidth - WIDTH - 12);
@@ -32,6 +55,8 @@ export function ThreadPopover({ root, replies, users, streams, rect, onReply, on
     below + MAX_HEIGHT < window.innerHeight - 12
       ? { left, top: below }
       : { left, bottom: clamp(window.innerHeight - rect.y + 10, 12, window.innerHeight - 80) };
+
+  const hasConversation = Boolean(root.body) || replies.length > 0 || streams.length > 0;
 
   function submit() {
     if (!draft.trim()) return;
@@ -65,15 +90,58 @@ export function ThreadPopover({ root, replies, users, streams, rect, onReply, on
           );
         })}
       </div>
+
       <div className="vt-thread-pop-composer">
         <MentionTextarea
           value={draft}
           onChange={setDraft}
           onSubmit={submit}
           users={userList}
-          placeholder="Reply… @ to ask an agent"
+          placeholder={hasConversation ? 'Reply… @ to ask an agent' : 'Comment… @ to ask an agent'}
         />
+        <div className="vt-chips">
+          {lists.map((list) => {
+            const existing = items.find((i) => i.listId === list.id) ?? null;
+            return (
+              <button
+                key={list.id}
+                className={`vt-chip${existing ? ' vt-chip-on' : ''}`}
+                title={existing ? `Remove from “${list.name}”` : `Add to “${list.name}”`}
+                onClick={() => onToggleList(list.id, existing)}
+              >
+                {list.name}
+              </button>
+            );
+          })}
+          {creatingList ? (
+            <form
+              className="vt-chip-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (newListName.trim()) {
+                  onCreateListAndSave(newListName.trim());
+                  setNewListName('');
+                  setCreatingList(false);
+                }
+              }}
+            >
+              <input
+                className="vt-chip-input"
+                autoFocus
+                placeholder="New list"
+                value={newListName}
+                onChange={(e) => setNewListName(e.target.value)}
+                onBlur={() => setCreatingList(false)}
+              />
+            </form>
+          ) : (
+            <button className="vt-chip vt-chip-new" title="New list" onClick={() => setCreatingList(true)}>
+              <Plus size={11} />
+            </button>
+          )}
+        </div>
       </div>
+
       <button className="vt-thread-pop-close" onClick={onClose} title="Close (Esc)">
         <X size={14} />
       </button>
@@ -101,7 +169,7 @@ function Message({
           <span className="vt-msg-name">{author?.name ?? 'Unknown'}</span>
           {author?.kind === 'agent' && <span className="vt-agent-tag">agent</span>}
           <span className="vt-msg-time">
-            {isBareHighlight ? 'highlighted · ' : ''}
+            {isBareHighlight ? 'saved · ' : ''}
             {timeAgo(annotation.createdAt)}
           </span>
           {annotation.authorId === 'me' && (

@@ -115,11 +115,16 @@ const handlers: Handlers = {
   },
 
   'library:get': async () => {
-    const [lists, items] = await Promise.all([
+    const [lists, items, mine] = await Promise.all([
       db.lists.orderBy('createdAt').toArray(),
       db.listItems.orderBy('createdAt').reverse().toArray(),
+      db.annotations
+        .where('authorId')
+        .equals('me')
+        .filter((a) => a.parentId === null && a.target !== null)
+        .sortBy('createdAt'),
     ]);
-    return { lists, items };
+    return { lists, items, highlights: mine.reverse() };
   },
 
   'seed:demo': async ({ pageUrl, pageTitle, seeds }) => {

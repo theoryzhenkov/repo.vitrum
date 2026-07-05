@@ -23,7 +23,6 @@ import { collectSeedCandidates, describeElementForDisplay, pageExcerpt } from '.
 import type { PendingTarget, Rect, StreamState } from './types';
 import { rectOf } from './types';
 import { Avatar } from './components/Avatar';
-import { Composer } from './components/Composer';
 import { ElementPicker } from './components/ElementPicker';
 import { InlinePills, participantLabel, type PillInfo } from './components/InlinePills';
 import { SelectionPopover } from './components/SelectionPopover';
@@ -39,7 +38,6 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [picker, setPicker] = useState(false);
   const [sel, setSel] = useState<PendingTarget | null>(null);
-  const [composing, setComposing] = useState(false);
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const [streams, setStreams] = useState<StreamState[]>([]);
   const [toast, setToast] = useState<string | null>(null);
@@ -76,7 +74,6 @@ export function App() {
         setAnchored(new Map());
         setActiveThread(null);
         setSel(null);
-        setComposing(false);
       }
     }, 1500);
     return () => clearInterval(timer);
@@ -153,7 +150,6 @@ export function App() {
     function onMouseDown(e: MouseEvent) {
       if (e.composedPath().some(isOurNode)) return;
       setSel(null);
-      setComposing(false);
       setActiveThread(null);
     }
     document.addEventListener('mouseup', onMouseUp);
@@ -191,7 +187,6 @@ export function App() {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
       if (picker) setPicker(false);
-      else if (composing) setComposing(false);
       else if (sel) setSel(null);
       else if (activeThread) setActiveThread(null);
       else if (sidebarOpen) setSidebarOpen(false);
@@ -210,7 +205,7 @@ export function App() {
       window.removeEventListener('resize', onScrollOrResize);
       cancelAnimationFrame(raf);
     };
-  }, [picker, composing, sel, activeThread, sidebarOpen]);
+  }, [picker, sel, activeThread, sidebarOpen]);
 
   // ------------------------------------------------------------- actions
 
@@ -280,26 +275,6 @@ export function App() {
     [state.users],
   );
 
-  const submitComment = useCallback(
-    async (body: string, pending: PendingTarget) => {
-      const root = newAnnotation({
-        target: pending.target,
-        quote: pending.quote,
-        body: body.trim(),
-        motivation: 'comment',
-        parentId: null,
-      });
-      await send('annotation:create', { annotation: root });
-      setComposing(false);
-      setSel(null);
-      window.getSelection()?.removeAllRanges();
-      await refresh();
-      setActiveThread(root.id);
-      for (const agent of mentionedAgents(body)) invokeAgent(agent, root, body.trim(), []);
-    },
-    [newAnnotation, refresh, mentionedAgents, invokeAgent],
-  );
-
   const submitReply = useCallback(
     async (root: Annotation, body: string) => {
       const reply = newAnnotation({
@@ -334,34 +309,38 @@ export function App() {
     [newAnnotation, refresh],
   );
 
-  const saveTarget = useCallback(
-    async (listId: string, pending: PendingTarget | null) => {
-      let annotationId: string | null = null;
-      if (pending) {
-        const annotation = newAnnotation({
-          target: pending.target,
-          quote: pending.quote,
-          body: '',
-          motivation: 'highlight',
-          parentId: null,
-        });
-        await send('annotation:create', { annotation });
-        annotationId = annotation.id;
-      }
-      await send('list:save', { listId, pageUrl, pageTitle: document.title, annotationId });
-      setSel(null);
+  const savePageToList = useCallback(
+    async (listId: string) => {
+      await send('list:save', { listId, pageUrl, pageTitle: document.title, annotationId: null });
       await refresh();
-      notify(pending ? 'Clip saved' : 'Page saved');
+      notify('Page saved');
     },
-    [newAnnotation, pageUrl, refresh, notify],
+    [pageUrl, refresh, notify],
   );
 
-  const createListAndSave = useCallback(
-    async (name: string, pending: PendingTarget | null) => {
+  const createListAndSavePage = useCallback(
+    async (name: string) => {
       const list = await send('list:create', { name });
-      await saveTarget(list.id, pending);
+      await savePageToList(list.id);
     },
-    [saveTarget],
+    [savePageToList],
+  );
+
+  const toggleAnnotationList = useCallback(
+    async (annotationId: string, listId: string, existing: { id: string } | null) => {
+      if (existing) await send('list:remove-item', { id: existing.id });
+      else await send('list:save', { listId, pageUrl, pageTitle: document.title, annotationId });
+      await refresh();
+    },
+    [pageUrl, refresh],
+  );
+
+  const createListAndSaveAnnotation = useCallback(
+    async (annotationId: string, name: string) => {
+      const list = await send('list:create', { name });
+      await toggleAnnotationList(annotationId, list.id, null);
+    },
+    [toggleAnnotationList],
   );
 
   const deleteAnnotation = useCallback(
@@ -434,15 +413,8 @@ export function App() {
       if (user && !participants.some((p) => p.id === user.id)) participants.push(user);
     }
     if (participants.length === 0) return [];
-    // Your own bare highlight is just a tint — a "You" pill on it is noise.
-    // Elements always get one; it's their only marker.
-    const isOwnBareHighlight =
-      result.kind === 'text' &&
-      participants.length === 1 &&
-      participants[0]!.id === 'me' &&
-      !root.body &&
-      authorIds.length === 1;
-    if (isOwnBareHighlight) return [];
+    // Own-only pills render dimmed (see .vt-pill-own) — they're the handle
+    // for commenting/filing, so they must exist, but shouldn't shout.
     return [{ root, anchored: result, participants }];
   });
 
@@ -463,28 +435,7 @@ export function App() {
 
   return (
     <>
-      {sel && !composing && (
-        <SelectionPopover
-          pending={sel}
-          lists={state.lists}
-          onHighlight={() => void addHighlight(sel)}
-          onComment={() => setComposing(true)}
-          onSave={(listId) => void saveTarget(listId, sel)}
-          onCreateAndSave={(name) => void createListAndSave(name, sel)}
-          onDismiss={() => setSel(null)}
-        />
-      )}
-      {sel && composing && (
-        <Composer
-          pending={sel}
-          users={state.users}
-          onSubmit={(body) => void submitComment(body, sel)}
-          onCancel={() => {
-            setComposing(false);
-            setSel(null);
-          }}
-        />
-      )}
+      {sel && <SelectionPopover pending={sel} onSave={() => void addHighlight(sel)} />}
       {picker && <ElementPicker onPick={onElementPicked} onCancel={() => setPicker(false)} />}
 
       <InlinePills pills={pills} onOpen={(annotationId) => openThread(annotationId, false)} />
@@ -498,8 +449,12 @@ export function App() {
           users={usersById}
           streams={streams.filter((s) => s.parentId === activeRoot.id)}
           rect={activeRect}
+          lists={state.lists}
+          items={state.itemsForPage.filter((i) => i.annotationId === activeRoot.id)}
           onReply={(body) => void submitReply(activeRoot, body)}
           onDelete={(annotationId) => void deleteAnnotation(annotationId)}
+          onToggleList={(listId, existing) => void toggleAnnotationList(activeRoot.id, listId, existing)}
+          onCreateListAndSave={(name) => void createListAndSaveAnnotation(activeRoot.id, name)}
           onClose={() => setActiveThread(null)}
         />
       )}
@@ -529,8 +484,8 @@ export function App() {
         anchoredIds={new Set(anchored.keys())}
         onClose={() => setSidebarOpen(false)}
         onOpenThread={(annotationId) => openThread(annotationId, true)}
-        onSavePage={(listId) => void saveTarget(listId, null)}
-        onCreateListAndSavePage={(name) => void createListAndSave(name, null)}
+        onSavePage={(listId) => void savePageToList(listId)}
+        onCreateListAndSavePage={(name) => void createListAndSavePage(name)}
         onPickElement={() => {
           setSidebarOpen(false);
           setPicker(true);

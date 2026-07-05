@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Diamond, FileText, Quote, Settings, Trash2, X } from 'lucide-react';
-import type { List, ListItem } from '@vitrum/model';
+import { Diamond, FileText, Highlighter, Quote, Settings, Trash2, X } from 'lucide-react';
+import type { Annotation, List, ListItem } from '@vitrum/model';
 import { send, type LibraryState } from '@/lib/messages';
 import { timeAgo } from '@/lib/util';
 
@@ -17,6 +17,11 @@ export function LibraryApp() {
 
   async function deleteList(list: List) {
     await send('list:delete', { id: list.id });
+    reload();
+  }
+
+  async function deleteHighlight(annotation: Annotation) {
+    await send('annotation:delete', { id: annotation.id });
     reload();
   }
 
@@ -40,11 +45,38 @@ export function LibraryApp() {
         </button>
       </header>
 
-      {library.items.length === 0 ? (
+      {library.highlights.length > 0 && (
+        <section className="list">
+          <div className="list-head">
+            <h2>
+              <Highlighter size={14} className="glyph" /> Highlights
+            </h2>
+            <span className="count">{library.highlights.length}</span>
+          </div>
+          {library.highlights.map((h) => (
+            <div className="item" key={h.id}>
+              <span className="item-kind">
+                <Quote size={13} />
+              </span>
+              <a className="item-title" href={h.pageUrl} target="_blank" rel="noreferrer" title={h.quote ?? ''}>
+                {h.quote ? `“${h.quote}”` : h.pageTitle}
+              </a>
+              <span className="item-meta">
+                {hostOf(h.pageUrl)} · {timeAgo(h.createdAt)}
+              </span>
+              <button className="icon-link" title="Delete highlight" onClick={() => void deleteHighlight(h)}>
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {library.items.length === 0 && library.highlights.length === 0 ? (
         <div className="empty">
           <p>Nothing saved yet.</p>
           <p className="hint">
-            On any page, select text or press <kbd>Alt+E</kbd> and choose <b>Save</b> — pages and clips land here.
+            On any page, select text or press <kbd>Alt+E</kbd> and hit <b>Save</b> — everything lands here.
           </p>
         </div>
       ) : (

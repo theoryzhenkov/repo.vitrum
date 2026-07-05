@@ -76,54 +76,31 @@ button {
   display: inline-block;
 }
 
-.vt-popover .vt-save-menu {
-  position: static;
-  box-shadow: none;
-  border: none;
-  border-top: 1px solid var(--vt-line);
-  border-radius: 0;
-  margin-top: 4px;
-  padding-top: 4px;
-  min-width: 170px;
+.vt-save-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--vt-accent);
 }
 
-/* ----------------------------------------------------------- composer */
-.vt-composer {
-  position: fixed;
-  z-index: 2147483200;
-  background: var(--vt-bg);
-  border: 1px solid var(--vt-line);
-  border-radius: var(--vt-radius);
-  box-shadow: var(--vt-shadow);
-  padding: 10px;
-  animation: vt-pop 0.12s ease-out;
+.vt-save-btn:hover {
+  background: #f4f2ff;
 }
 
-.vt-composer-quote {
-  font-size: 11.5px;
-  color: var(--vt-ink-2);
-  border-left: 3px solid var(--vt-amber);
-  padding: 1px 8px;
-  margin-bottom: 7px;
-  max-height: 38px;
-  overflow: hidden;
-  font-style: italic;
-}
-
-.vt-composer-agents {
+/* --------------------------------------------------------- list chips */
+.vt-chips {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-top: 7px;
   flex-wrap: wrap;
+  margin-top: 7px;
 }
 
-.vt-composer-hint {
-  font-size: 10.5px;
-  color: var(--vt-ink-2);
-}
-
-.vt-agent-chip {
+.vt-chip {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -132,20 +109,44 @@ button {
   border: 1px solid var(--vt-line);
   color: var(--vt-ink-2);
   border-radius: 999px;
-  padding: 1px 8px;
+  padding: 2px 9px;
   background: #fff;
+  transition: all 0.1s ease;
 }
 
-.vt-agent-chip:hover {
+.vt-chip:hover {
   border-color: var(--vt-accent);
   color: var(--vt-accent);
 }
 
-.vt-composer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 7px;
-  margin-top: 8px;
+.vt-chip-on {
+  background: var(--vt-accent);
+  border-color: var(--vt-accent);
+  color: #fff;
+}
+
+.vt-chip-on:hover {
+  background: #5d4cd4;
+  color: #fff;
+}
+
+.vt-chip-new {
+  padding: 2px 7px;
+}
+
+.vt-chip-form {
+  display: inline-flex;
+}
+
+.vt-chip-input {
+  width: 90px;
+  border: 1px solid var(--vt-accent);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 10.5px;
+  outline: none;
+  background: #fff;
+  color: var(--vt-ink);
 }
 
 /* ------------------------------------------------------------- inputs */
@@ -360,6 +361,15 @@ button {
 .vt-pill:hover {
   box-shadow: 0 3px 14px rgba(20, 20, 35, 0.22);
   z-index: 2147483085;
+}
+
+/* Own-only pills are handles, not signals — keep them quiet. */
+.vt-pill-own {
+  opacity: 0.45;
+}
+
+.vt-pill-own:hover {
+  opacity: 1;
 }
 
 .vt-pill-avatars {

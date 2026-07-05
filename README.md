@@ -35,11 +35,13 @@ Download the packed build:
 
 ## Use
 
-1. Open the settings page (extension icon → sidebar footer → Settings) and add your
-   API key, or point at a local model.
-2. On any page: select text → Highlight / Comment / Save. `Alt+E` picks a whole
-   element (image, chart, code block). `Alt+V` toggles the sidebar.
-3. Mention `@skeptic`, `@librarian`, or `@eli5` in any comment and the agent replies
-   in the thread, anchored to the same spot.
-4. Demo staging: sidebar footer → "Seed demo" fills the current page with plausible
-   friend activity (re-running it replaces the previous seed).
+1. Open Settings (toolbar icon → Settings) and add your API key, or point at a
+   local model.
+2. On any page: select text → `Save` (or `Alt+S`). `Alt+E` picks a whole element
+   (image, chart, code block). A pill appears in the margin — click it to
+   comment, reply, or file the save into lists.
+3. Mention `@skeptic`, `@librarian`, or `@eli5` in any comment and the agent
+   replies in the thread, anchored to the same spot.
+4. The top-right chip shows who annotated the page; click it for the thread
+   index. Page-level actions (save page, seed demo activity, Library) live in
+   the toolbar popup.

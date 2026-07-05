@@ -78,6 +78,9 @@ export type AgentEvent =
   | { type: 'done'; annotation: Annotation }
   | { type: 'error'; message: string };
 
-// ------------------------------------------------- background → tab pushes
+// ----------------------------------------- background/popup → tab pushes
 
-export type TabCommand = { type: 'toggle-sidebar' } | { type: 'element-picker' };
+export type TabCommand =
+  | { type: 'element-picker' }
+  | { type: 'save-selection' }
+  | { type: 'seed-demo' };

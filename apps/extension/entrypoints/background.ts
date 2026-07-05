@@ -37,14 +37,10 @@ export default defineBackground(() => {
     });
   });
 
-  browser.action.onClicked.addListener((tab) => {
-    if (tab.id !== undefined) void sendToTab(tab.id, { type: 'toggle-sidebar' });
-  });
-
   browser.commands.onCommand.addListener(async (command) => {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
     if (tab?.id === undefined) return;
-    if (command === 'toggle-sidebar' || command === 'element-picker') {
+    if (command === 'element-picker' || command === 'save-selection') {
       void sendToTab(tab.id, { type: command });
     }
   });

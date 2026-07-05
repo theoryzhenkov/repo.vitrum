@@ -18,15 +18,15 @@ import {
   type TabCommand,
 } from '@/lib/messages';
 import { id } from '@/lib/util';
-import { flashRange, paintHighlights } from './highlightPainter';
+import { flashRange, paintHighlights, setHoverRange } from './highlightPainter';
 import { collectSeedCandidates, describeElementForDisplay, pageExcerpt } from './pageUtils';
 import type { PendingTarget, Rect, StreamState } from './types';
 import { rectOf } from './types';
 import { Avatar } from './components/Avatar';
 import { ElementPicker } from './components/ElementPicker';
 import { InlinePills, participantLabel, type PillInfo } from './components/InlinePills';
+import { PageIndex } from './components/PageIndex';
 import { SelectionPopover } from './components/SelectionPopover';
-import { Sidebar } from './components/Sidebar';
 import { ThreadPopover } from './components/ThreadPopover';
 
 const EMPTY_STATE: PageState = { annotations: [], users: [], lists: [], itemsForPage: [] };
@@ -35,10 +35,10 @@ export function App() {
   const [pageUrl, setPageUrl] = useState(() => normalizeUrl(location.href));
   const [state, setState] = useState<PageState>(EMPTY_STATE);
   const [anchored, setAnchored] = useState<Map<string, Anchored>>(new Map());
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [picker, setPicker] = useState(false);
   const [sel, setSel] = useState<PendingTarget | null>(null);
   const [activeThread, setActiveThread] = useState<string | null>(null);
+  const [indexOpen, setIndexOpen] = useState(false);
   const [streams, setStreams] = useState<StreamState[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [flashRect, setFlashRect] = useState<Rect | null>(null);
@@ -73,26 +73,18 @@ export function App() {
         setPageUrl(now);
         setAnchored(new Map());
         setActiveThread(null);
+        setIndexOpen(false);
         setSel(null);
       }
     }, 1500);
     return () => clearInterval(timer);
   }, [pageUrl]);
 
-  // ---- Commands pushed from the background (toolbar click, keyboard shortcuts).
-  useEffect(() => {
-    const listener = (message: unknown) => {
-      const cmd = message as TabCommand;
-      if (cmd?.type === 'toggle-sidebar') setSidebarOpen((v) => !v);
-      if (cmd?.type === 'element-picker') setPicker(true);
-    };
-    browser.runtime.onMessage.addListener(listener);
-    return () => browser.runtime.onMessage.removeListener(listener);
-  }, []);
-
-  // ---- Re-anchor annotations whenever they change; retry for late-loading content.
+  // ---- Re-anchor when annotations change, and again (debounced) whenever the
+  //      page DOM mutates — that's what keeps pill positions from going stale.
   useEffect(() => {
     let cancelled = false;
+    let timer: number | undefined;
     const attempt = () => {
       if (cancelled) return;
       const next = new Map<string, Anchored>();
@@ -104,12 +96,38 @@ export function App() {
       setAnchored(next);
     };
     attempt();
-    const retries = [setTimeout(attempt, 1200), setTimeout(attempt, 3200)];
+    const observer = new MutationObserver(() => {
+      if (stateRef.current.annotations.length === 0) return;
+      clearTimeout(timer);
+      timer = window.setTimeout(attempt, 400);
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     return () => {
       cancelled = true;
-      retries.forEach(clearTimeout);
+      clearTimeout(timer);
+      observer.disconnect();
     };
   }, [state.annotations]);
+
+  // ---- Reposition overlays on scroll/resize and on layout reflow (images
+  //      loading, lazy content) via a ResizeObserver on the body.
+  useEffect(() => {
+    let raf = 0;
+    const bump = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setTick((t) => t + 1));
+    };
+    const resizeObserver = new ResizeObserver(bump);
+    resizeObserver.observe(document.body);
+    window.addEventListener('scroll', bump, { passive: true });
+    window.addEventListener('resize', bump, { passive: true });
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('scroll', bump);
+      window.removeEventListener('resize', bump);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   // ---- Paint text highlights grouped by author kind.
   const usersById = useMemo(() => new Map(state.users.map((u) => [u.id, u] as const)), [state.users]);
@@ -125,19 +143,17 @@ export function App() {
     paintHighlights(groups);
   }, [anchored, state.annotations, usersById]);
 
-  // ---- Selection → popover.
+  // ---- Selection → Save popover.
   useEffect(() => {
     function onMouseUp(e: MouseEvent) {
       if (picker) return;
-      const path = e.composedPath();
-      if (path.some(isOurNode)) return;
+      if (e.composedPath().some(isOurNode)) return;
       setTimeout(() => {
         const selection = window.getSelection();
         if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
         const range = selection.getRangeAt(0);
         const target = describeTextRange(document.body, range);
         if (!target) return;
-        setActiveThread(null);
         setSel({
           kind: 'text',
           target,
@@ -149,8 +165,9 @@ export function App() {
     }
     function onMouseDown(e: MouseEvent) {
       if (e.composedPath().some(isOurNode)) return;
+      // The thread card is pinned — only Esc/close/opening another dismisses it.
       setSel(null);
-      setActiveThread(null);
+      setIndexOpen(false);
     }
     document.addEventListener('mouseup', onMouseUp);
     document.addEventListener('mousedown', onMouseDown);
@@ -166,46 +183,59 @@ export function App() {
       if (picker || e.composedPath().some(isOurNode)) return;
       const selection = window.getSelection();
       if (selection && !selection.isCollapsed) return; // user is selecting, not clicking
-      for (const a of stateRef.current.annotations) {
-        const result = anchored.get(a.id);
-        if (!result || result.kind !== 'text') continue;
-        for (const rect of Array.from(result.range.getClientRects())) {
-          if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-            setSel(null);
-            setActiveThread(a.parentId ?? a.id);
-            return;
-          }
-        }
-      }
+      const hit = hitTextAnnotation(stateRef.current.annotations, anchored, e.clientX, e.clientY);
+      if (hit) setActiveThread(hit.parentId ?? hit.id);
     }
     document.addEventListener('click', onClick);
     return () => document.removeEventListener('click', onClick);
   }, [anchored, picker]);
 
-  // ---- Escape unwinds UI layers; scroll/resize re-render anchored positions.
+  // ---- Hover affordance: tint the highlight under the cursor, show pointer.
+  useEffect(() => {
+    let raf = 0;
+    let hovering = false;
+    function onMove(e: MouseEvent) {
+      if (picker) return;
+      const overUs = e.composedPath().some(isOurNode);
+      const { clientX, clientY } = e;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const hit = overUs ? null : hitTextAnnotation(stateRef.current.annotations, anchored, clientX, clientY);
+        if (hit) {
+          const result = anchored.get(hit.id);
+          if (result?.kind === 'text') setHoverRange(result.range);
+          if (!hovering) {
+            document.documentElement.style.cursor = 'pointer';
+            hovering = true;
+          }
+        } else if (hovering) {
+          setHoverRange(null);
+          document.documentElement.style.cursor = '';
+          hovering = false;
+        }
+      });
+    }
+    document.addEventListener('mousemove', onMove, { passive: true });
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      cancelAnimationFrame(raf);
+      setHoverRange(null);
+      document.documentElement.style.cursor = '';
+    };
+  }, [anchored, picker]);
+
+  // ---- Escape unwinds UI layers.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
       if (picker) setPicker(false);
       else if (sel) setSel(null);
       else if (activeThread) setActiveThread(null);
-      else if (sidebarOpen) setSidebarOpen(false);
-    }
-    let raf = 0;
-    function onScrollOrResize() {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => setTick((t) => t + 1));
+      else if (indexOpen) setIndexOpen(false);
     }
     document.addEventListener('keydown', onKey);
-    window.addEventListener('scroll', onScrollOrResize, { passive: true });
-    window.addEventListener('resize', onScrollOrResize, { passive: true });
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('scroll', onScrollOrResize);
-      window.removeEventListener('resize', onScrollOrResize);
-      cancelAnimationFrame(raf);
-    };
-  }, [picker, sel, activeThread, sidebarOpen]);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [picker, sel, activeThread, indexOpen]);
 
   // ------------------------------------------------------------- actions
 
@@ -304,27 +334,39 @@ export function App() {
       await send('annotation:create', { annotation });
       setSel(null);
       window.getSelection()?.removeAllRanges();
+      // The confirmation moment: pulse what was just captured.
+      if (pending.range) {
+        flashRange(pending.range);
+      } else if (pending.element) {
+        setFlashRect(rectOf(pending.element.getBoundingClientRect()));
+        setTimeout(() => setFlashRect(null), 1400);
+      }
       await refresh();
     },
     [newAnnotation, refresh],
   );
 
-  const savePageToList = useCallback(
-    async (listId: string) => {
-      await send('list:save', { listId, pageUrl, pageTitle: document.title, annotationId: null });
-      await refresh();
-      notify('Page saved');
-    },
-    [pageUrl, refresh, notify],
-  );
-
-  const createListAndSavePage = useCallback(
-    async (name: string) => {
-      const list = await send('list:create', { name });
-      await savePageToList(list.id);
-    },
-    [savePageToList],
-  );
+  const saveSelectionNow = useCallback(async () => {
+    if (sel) {
+      await addHighlight(sel);
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      notify('Select some text first (Alt+S saves the selection)');
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    const target = describeTextRange(document.body, range);
+    if (!target) return;
+    await addHighlight({
+      kind: 'text',
+      target,
+      quote: range.toString().replace(/\s+/g, ' ').trim(),
+      rect: rectOf(range.getBoundingClientRect()),
+      range,
+    });
+  }, [sel, addHighlight, notify]);
 
   const toggleAnnotationList = useCallback(
     async (annotationId: string, listId: string, existing: { id: string } | null) => {
@@ -352,10 +394,10 @@ export function App() {
     [refresh, activeThread],
   );
 
-  /** Open a thread inline; from the sidebar this also scrolls the page to it. */
+  /** Open a thread inline; from the index this also scrolls the page to it. */
   const openThread = useCallback(
     (annotationId: string, scroll: boolean) => {
-      setSidebarOpen(false);
+      setIndexOpen(false);
       setActiveThread(annotationId);
       const result = anchored.get(annotationId);
       if (!result || !scroll) return;
@@ -375,7 +417,6 @@ export function App() {
 
   const onElementPicked = useCallback((el: Element) => {
     setPicker(false);
-    setActiveThread(null);
     setSel({
       kind: 'element',
       target: describeElement(document.body, el),
@@ -395,6 +436,24 @@ export function App() {
     await refresh();
     notify('Demo activity staged on this page');
   }, [pageUrl, refresh, notify]);
+
+  // ---- Commands from the popup / keyboard shortcuts (stable listener, live handlers).
+  const commandsRef = useRef({ picker: () => {}, seed: () => {}, save: () => {} });
+  commandsRef.current = {
+    picker: () => setPicker(true),
+    seed: () => void seedDemo(),
+    save: () => void saveSelectionNow(),
+  };
+  useEffect(() => {
+    const listener = (message: unknown) => {
+      const cmd = message as TabCommand;
+      if (cmd?.type === 'element-picker') commandsRef.current.picker();
+      if (cmd?.type === 'seed-demo') commandsRef.current.seed();
+      if (cmd?.type === 'save-selection') commandsRef.current.save();
+    };
+    browser.runtime.onMessage.addListener(listener);
+    return () => browser.runtime.onMessage.removeListener(listener);
+  }, []);
 
   // -------------------------------------------------------------- render
 
@@ -466,8 +525,12 @@ export function App() {
         />
       )}
 
-      {!sidebarOpen && pageParticipants.length > 0 && (
-        <button className="vt-presence" onClick={() => setSidebarOpen(true)} title="See annotations (Alt+V)">
+      {pageParticipants.length > 0 && (
+        <button
+          className="vt-presence"
+          onClick={() => setIndexOpen((v) => !v)}
+          title="Annotations on this page"
+        >
           <Diamond size={11} />
           <span className="vt-pill-avatars">
             {pageParticipants.slice(0, 4).map((u) => (
@@ -477,21 +540,13 @@ export function App() {
           <span className="vt-presence-label">{participantLabel(pageParticipants)}</span>
         </button>
       )}
-
-      <Sidebar
-        open={sidebarOpen}
-        state={state}
-        anchoredIds={new Set(anchored.keys())}
-        onClose={() => setSidebarOpen(false)}
-        onOpenThread={(annotationId) => openThread(annotationId, true)}
-        onSavePage={(listId) => void savePageToList(listId)}
-        onCreateListAndSavePage={(name) => void createListAndSavePage(name)}
-        onPickElement={() => {
-          setSidebarOpen(false);
-          setPicker(true);
-        }}
-        onSeedDemo={() => void seedDemo()}
-      />
+      {indexOpen && (
+        <PageIndex
+          state={state}
+          anchoredIds={new Set(anchored.keys())}
+          onOpen={(annotationId) => openThread(annotationId, true)}
+        />
+      )}
 
       {toast && <div className="vt-toast">{toast}</div>}
     </>
@@ -500,4 +555,20 @@ export function App() {
 
 function isOurNode(node: EventTarget): boolean {
   return node instanceof Element && node.tagName?.toLowerCase().startsWith('vitrum');
+}
+
+function hitTextAnnotation(
+  annotations: Annotation[],
+  anchored: Map<string, Anchored>,
+  x: number,
+  y: number,
+): Annotation | null {
+  for (const a of annotations) {
+    const result = anchored.get(a.id);
+    if (!result || result.kind !== 'text') continue;
+    for (const rect of Array.from(result.range.getClientRects())) {
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return a;
+    }
+  }
+  return null;
 }

@@ -11,6 +11,7 @@ const HIGHLIGHT_CSS = `
 ::highlight(vitrum-mine) { background-color: rgba(255, 203, 55, 0.42); }
 ::highlight(vitrum-friend) { background-color: rgba(88, 160, 250, 0.32); }
 ::highlight(vitrum-agent) { background-color: rgba(167, 139, 250, 0.35); }
+::highlight(vitrum-hover) { background-color: rgba(109, 92, 231, 0.3); }
 ::highlight(vitrum-flash) { background-color: rgba(255, 118, 82, 0.75); }
 `;
 
@@ -43,6 +44,20 @@ export function paintHighlights(groups: HighlightGroups): void {
   for (const key of ['mine', 'friend', 'agent'] as const) {
     registry.set(`vitrum-${key}`, new HighlightCtor(...groups[key]));
   }
+}
+
+/** Interactivity affordance: tint the highlight under the cursor. */
+export function setHoverRange(range: Range | null): void {
+  const registry = highlightsApi();
+  if (!registry) return;
+  if (!range) {
+    registry.delete('vitrum-hover');
+    return;
+  }
+  const HighlightCtor = (globalThis as any).Highlight;
+  const highlight = new HighlightCtor(range);
+  highlight.priority = 5; // win over the base author tint
+  registry.set('vitrum-hover', highlight);
 }
 
 let flashTimer: ReturnType<typeof setTimeout> | undefined;

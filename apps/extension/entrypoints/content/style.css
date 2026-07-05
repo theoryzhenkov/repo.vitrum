@@ -247,59 +247,6 @@ button {
   background: #eaeaf2;
 }
 
-/* ---------------------------------------------------------- dropdowns */
-.vt-save-anchor {
-  position: relative;
-}
-
-.vt-save-menu,
-.vt-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  min-width: 160px;
-  background: var(--vt-bg);
-  border: 1px solid var(--vt-line);
-  border-radius: 10px;
-  box-shadow: var(--vt-shadow);
-  padding: 4px;
-  z-index: 30;
-}
-
-.vt-menu button,
-.vt-save-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 9px;
-  border-radius: 7px;
-  font-size: 12.5px;
-  text-align: left;
-  color: var(--vt-ink);
-}
-
-.vt-menu button:hover,
-.vt-save-item:hover {
-  background: #f4f2ff;
-}
-
-.vt-save-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 3px;
-  background: var(--vt-accent);
-  opacity: 0.75;
-}
-
-.vt-save-create {
-  color: var(--vt-ink-2);
-}
-
-.vt-save-new {
-  padding: 4px;
-}
-
 /* --------------------------------------------------------------- picker */
 .vt-picker-veil {
   position: fixed;
@@ -356,6 +303,13 @@ button {
   padding: 2px 3px;
   box-shadow: 0 1px 6px rgba(20, 20, 35, 0.16);
   transition: box-shadow 0.12s ease;
+  animation: vt-pill-in 0.25s ease-out; /* the save-confirmation moment */
+}
+
+@keyframes vt-pill-in {
+  from { opacity: 0; transform: scale(0.5); }
+  60% { transform: scale(1.15); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .vt-pill:hover {
@@ -583,94 +537,37 @@ button {
   50% { opacity: 0; }
 }
 
-/* --------------------------------------------------------------- sidebar */
-.vt-sidebar {
+/* ------------------------------------------------------------ page index */
+.vt-index {
   position: fixed;
-  top: 12px;
-  right: 12px;
-  bottom: 12px;
-  width: 304px;
-  z-index: 2147483180;
+  top: 46px;
+  right: 14px;
+  width: 288px;
+  max-height: 60vh;
+  overflow-y: auto;
+  z-index: 2147483170;
   background: var(--vt-bg);
   border: 1px solid var(--vt-line);
   border-radius: var(--vt-radius);
   box-shadow: var(--vt-shadow);
-  display: flex;
-  flex-direction: column;
-  transform: translateX(calc(100% + 24px));
-  transition: transform 0.2s cubic-bezier(0.32, 0.72, 0.25, 1);
+  padding: 6px;
+  animation: vt-pop 0.12s ease-out;
 }
 
-.vt-sidebar.vt-open {
-  transform: none;
-}
-
-.vt-side-header {
+.vt-index-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--vt-line);
-}
-
-.vt-wordmark {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13.5px;
+  gap: 5px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--vt-ink);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--vt-ink-2);
+  padding: 5px 9px 7px;
 }
 
 .vt-wordmark-glyph {
   color: var(--vt-accent);
-  margin-right: 1px;
-}
-
-.vt-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.vt-icon-btn {
-  font-size: 14px;
-  color: var(--vt-ink-2);
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.vt-icon-btn:hover {
-  background: #f3f3f7;
-  color: var(--vt-ink);
-}
-
-.vt-icon-on {
-  color: #2f9e44;
-}
-
-.vt-side-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-.vt-empty {
-  text-align: center;
-  color: var(--vt-ink-2);
-  font-size: 12.5px;
-  padding: 30px 16px;
-}
-
-.vt-empty-hint {
-  font-size: 11.5px;
-  line-height: 1.55;
-  margin-top: 7px;
 }
 
 /* ------------------------------------------------------------ thread rows */

@@ -8,16 +8,16 @@ export default defineConfig({
     permissions: ['storage'],
     host_permissions: ['<all_urls>'],
     action: {
-      default_title: 'Vitrum — toggle sidebar (Alt+V)',
+      default_title: 'Vitrum',
     },
     commands: {
-      'toggle-sidebar': {
-        suggested_key: { default: 'Alt+V' },
-        description: 'Toggle the Vitrum sidebar',
-      },
       'element-picker': {
         suggested_key: { default: 'Alt+E' },
         description: 'Annotate an element on the page',
+      },
+      'save-selection': {
+        suggested_key: { default: 'Alt+S' },
+        description: 'Save the current selection',
       },
     },
   },

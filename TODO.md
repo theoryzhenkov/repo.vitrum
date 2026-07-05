@@ -18,7 +18,12 @@ press a shortcut, or the page already carries annotations.
 - **One card does everything.** Clicking a pill (or highlight) opens the
   anchored card: thread + streaming agents + composer + list chips (toggle to
   add/remove, `+` to create). Unfiled saves show under "Highlights" in the
-  Library tab; lists are optional curation, not required folders.
+  Library tab; lists are optional curation, not required folders. The card is
+  pinned — only Esc/close/opening another dismisses it.
+- **No sidebar.** Page-level actions (save page, element picker, seed demo,
+  Library, Settings) live in the toolbar popup; the on-page thread index —
+  including orphans — is a dropdown under the presence chip. Alt+S saves the
+  current selection; Alt+E picks an element. Highlights tint on hover.
 - **The sidebar is an index, not a home.** Alt+V shows a slim list of threads on
   the current page (quote · author · reply count); clicking one jumps to it and
   opens the inline card. Header carries four small icons: save page, annotate
@@ -38,6 +43,11 @@ press a shortcut, or the page already carries annotations.
 - [x] Icon-only selection toolbar
 - [x] Element badges → small dots
 - [x] Lucide icons throughout (no emojis / ad-hoc glyphs)
+- [x] Remove sidebar → toolbar popup + presence-chip index dropdown
+- [x] Pin the thread card (Esc/close to dismiss, page clicks don't kill it)
+- [x] Save feedback: highlight pulse + pill scale-in; Alt+S quick save
+- [x] Rail jitter: MutationObserver re-anchor + ResizeObserver reflow tracking
+- [x] Hover affordance: highlights tint + pointer cursor under the cursor
 
 ## Demo prep
 

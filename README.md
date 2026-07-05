@@ -27,6 +27,12 @@ npm run build         # production build → apps/extension/.output/chrome-mv3
 Load in Chrome: `chrome://extensions` → Developer mode → Load unpacked →
 `apps/extension/.output/chrome-mv3`.
 
+## Install without building
+
+Download the packed build:
+[vitrum-extension-0.1.0-chrome.zip](https://github.com/theoryzhenkov/repo.vitrum/raw/main/apps/extension/.output/vitrum-extension-0.1.0-chrome.zip)
+— unzip it, then `chrome://extensions` → Developer mode → Load unpacked → the unzipped folder.
+
 ## Use
 
 1. Open the settings page (extension icon → sidebar footer → Settings) and add your

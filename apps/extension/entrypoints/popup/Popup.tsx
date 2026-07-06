@@ -72,7 +72,9 @@ export function Popup() {
   }
 
   async function openSettings() {
-    await browser.runtime.openOptionsPage();
+    // Not openOptionsPage(): Chrome sporadically rejects it with "Could not
+    // create an options page" — a plain tab to the bundled page always works.
+    await browser.tabs.create({ url: browser.runtime.getURL('/options.html') });
     window.close();
   }
 

@@ -240,7 +240,8 @@ const handlers: Handlers = {
   },
 
   'open-options': async () => {
-    await browser.runtime.openOptionsPage();
+    // Same workaround as the popup: openOptionsPage() sporadically rejects.
+    await browser.tabs.create({ url: browser.runtime.getURL('/options.html') });
   },
 
   'open-library': async () => {

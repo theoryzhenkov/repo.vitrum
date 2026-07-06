@@ -1,19 +1,24 @@
 import { useState } from 'react';
-import type { Annotation, User } from '@vitrum/model';
+import type { Annotation, Reaction, ReactionKind, User } from '@vitrum/model';
 import type { Anchored } from '@vitrum/anchoring';
 import { flashRange } from '../highlightPainter';
 import { Avatar } from './Avatar';
+import { REACTIONS } from './reactions';
 
 export interface PillInfo {
   root: Annotation;
   anchored: Anchored;
   /** Everyone in the thread, root author first, deduped. */
   participants: User[];
+  /** Reactions on the root (the highlight itself). */
+  reactions: Reaction[];
 }
 
 interface Props {
   pills: PillInfo[];
+  users: Map<string, User>;
   onOpen: (annotationId: string) => void;
+  onToggleReaction: (annotationId: string, kind: ReactionKind) => void;
 }
 
 const PILL_HEIGHT = 20;
@@ -27,12 +32,12 @@ interface Placed {
 }
 
 /**
- * Participant pills on a margin rail: text pills sit in the whitespace right
- * of the highlight's containing block, aligned to its first line, stacked
- * downward when they'd collide. Element pills sit on the element's corner.
- * Never inline with text, so they can't overlap it on any layout.
+ * Participant pills on a margin rail. At rest: avatar stack plus reaction
+ * count chips (only where reactions exist — zero footprint otherwise).
+ * On hover: participant names and the full react palette, so you can react
+ * to the highlight without opening the thread. Click opens the card.
  */
-export function InlinePills({ pills, onOpen }: Props) {
+export function InlinePills({ pills, users, onOpen, onToggleReaction }: Props) {
   const textPills: Placed[] = [];
   const elementPills: Placed[] = [];
 
@@ -46,8 +51,8 @@ export function InlinePills({ pills, onOpen }: Props) {
       const blockRight = block ? block.getBoundingClientRect().right : first.right;
       textPills.push({
         info,
-        left: Math.min(blockRight + MARGIN_OFFSET, window.innerWidth - 56),
-        top: first.top + first.height / 2 - PILL_HEIGHT / 2,
+        left: Math.round(Math.min(blockRight + MARGIN_OFFSET, window.innerWidth - 56)),
+        top: Math.round(first.top + first.height / 2 - PILL_HEIGHT / 2),
       });
     } else {
       const rect = info.anchored.element.getBoundingClientRect();
@@ -55,8 +60,8 @@ export function InlinePills({ pills, onOpen }: Props) {
       if (rect.bottom < -60 || rect.top > window.innerHeight + 60) continue;
       elementPills.push({
         info,
-        left: Math.min(rect.right - 14, window.innerWidth - 56),
-        top: Math.max(rect.top - 9, 4),
+        left: Math.round(Math.min(rect.right - 14, window.innerWidth - 56)),
+        top: Math.round(Math.max(rect.top - 9, 4)),
       });
     }
   }
@@ -71,7 +76,13 @@ export function InlinePills({ pills, onOpen }: Props) {
   return (
     <>
       {[...textPills, ...elementPills].map((placed) => (
-        <Pill key={placed.info.root.id} placed={placed} onOpen={onOpen} />
+        <Pill
+          key={placed.info.root.id}
+          placed={placed}
+          users={users}
+          onOpen={onOpen}
+          onToggleReaction={onToggleReaction}
+        />
       ))}
     </>
   );
@@ -83,14 +94,27 @@ export function participantLabel(participants: User[]): string {
     .join(', ');
 }
 
-function Pill({ placed, onOpen }: { placed: Placed; onOpen: (annotationId: string) => void }) {
+function Pill({
+  placed,
+  users,
+  onOpen,
+  onToggleReaction,
+}: {
+  placed: Placed;
+  users: Map<string, User>;
+  onOpen: (annotationId: string) => void;
+  onToggleReaction: (annotationId: string, kind: ReactionKind) => void;
+}) {
   const [hover, setHover] = useState(false);
   const { info, left, top } = placed;
-  const ownOnly = info.participants.length === 1 && info.participants[0]!.id === 'me';
-  const expandMax = Math.max(60, window.innerWidth - left - 56);
+  const ownOnly =
+    info.participants.length === 1 && info.participants[0]!.id === 'me' && info.reactions.length === 0;
+  const expandMax = Math.max(60, window.innerWidth - left - 190);
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       className={`vt-pill${hover ? ' vt-pill-open' : ''}${ownOnly ? ' vt-pill-own' : ''}`}
       style={{ left, top }}
       onMouseEnter={() => {
@@ -100,17 +124,57 @@ function Pill({ placed, onOpen }: { placed: Placed; onOpen: (annotationId: strin
       }}
       onMouseLeave={() => setHover(false)}
       onClick={() => onOpen(info.root.id)}
-      title="Open"
+      onKeyDown={(e) => e.key === 'Enter' && onOpen(info.root.id)}
+      title="Open thread"
     >
       <span className="vt-pill-avatars">
         {info.participants.slice(0, 3).map((u) => (
           <Avatar key={u.id} user={u} size={14} />
         ))}
       </span>
+
+      {/* Reaction counts on the highlight — always visible when present. */}
+      {REACTIONS.map(({ kind, title, Icon }) => {
+        const ofKind = info.reactions.filter((r) => r.kind === kind);
+        if (ofKind.length === 0) return null;
+        const mine = ofKind.some((r) => r.userId === 'me');
+        const names = ofKind.map((r) => users.get(r.userId)?.name.split(/\s+/)[0] ?? '?').join(', ');
+        return (
+          <button
+            key={kind}
+            className={`vt-pill-react${mine ? ' vt-on' : ''}`}
+            title={`${title}: ${names}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleReaction(info.root.id, kind);
+            }}
+          >
+            <Icon size={9} />
+            {ofKind.length}
+          </button>
+        );
+      })}
+
       <span className="vt-pill-label" style={{ maxWidth: hover ? expandMax : 0 }}>
         {participantLabel(info.participants)}
       </span>
-    </button>
+
+      {/* React to the highlight in place, no card needed. */}
+      <span className={`vt-pill-palette${hover ? ' vt-open' : ''}`}>
+        {REACTIONS.map(({ kind, title, Icon }) => (
+          <button
+            key={kind}
+            title={title}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleReaction(info.root.id, kind);
+            }}
+          >
+            <Icon size={11} />
+          </button>
+        ))}
+      </span>
+    </div>
   );
 }
 

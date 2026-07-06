@@ -516,7 +516,8 @@ export function App() {
     if (participants.length === 0) return [];
     // Own-only pills render dimmed (see .vt-pill-own) — they're the handle
     // for commenting/filing, so they must exist, but shouldn't shout.
-    return [{ root, anchored: result, participants }];
+    const reactions = state.reactions.filter((r) => r.annotationId === root.id);
+    return [{ root, anchored: result, participants, reactions }];
   });
 
   const pageParticipants: User[] = [];
@@ -539,7 +540,12 @@ export function App() {
       {sel && <SelectionPopover pending={sel} onSave={() => void addHighlight(sel)} />}
       {picker && <ElementPicker onPick={onElementPicked} onCancel={() => setPicker(false)} />}
 
-      <InlinePills pills={pills} onOpen={(annotationId) => openThread(annotationId, false)} />
+      <InlinePills
+        pills={pills}
+        users={usersById}
+        onOpen={(annotationId) => openThread(annotationId, false)}
+        onToggleReaction={(annotationId, kind) => void toggleReaction(annotationId, kind)}
+      />
 
       {activeRoot && (
         <ThreadPopover

@@ -48,6 +48,9 @@ press a shortcut, or the page already carries annotations.
 - [x] Nested threads: reply to any comment, agents attach under the message that asked
 - [x] Thread card: draggable by header (unpins), resizable via native grip
 - [x] LessWrong-style reacts (▲▼ ✓✗ 💡 Δ): hover palette, chips only where reactions exist
+- [x] Strip reasoning blocks (<think>…</think>) from streamed agent replies
+- [x] Multi-agent threads: agents can @summon each other (depth-capped cascade)
+- [x] Proactive @librarian on save (opt-in in Settings; gated on real related material)
 - [x] Pin the thread card (Esc/close to dismiss, page clicks don't kill it)
 - [x] Save feedback: highlight pulse + pill scale-in; Alt+S quick save
 - [x] Rail jitter: MutationObserver re-anchor + ResizeObserver reflow tracking
@@ -64,8 +67,8 @@ press a shortcut, or the page already carries annotations.
 
 ## Later / stretch
 
-- [ ] "Related from your library" resurfacing on save (the retention story)
+- [ ] Highlight deep-links: library/citation clicks open the page AND flash the passage
+- [ ] Staged live activity: seed-demo holds back one friend reply, lands it ~10s after page load
 - [ ] Import from Curius/Pocket (the poaching story)
 - [ ] Editable agent personas in settings
-- [ ] Multi-agent threads (agents responding to each other)
 - [ ] Firefox/Safari builds (WXT keeps the door open)

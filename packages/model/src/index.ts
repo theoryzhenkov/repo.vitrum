@@ -128,6 +128,8 @@ export interface LlmSettings {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /** @librarian comments on your saves, unprompted, when the library connects. */
+  autoLibrarian: boolean;
 }
 
 export const DEFAULT_LLM_SETTINGS: LlmSettings = {
@@ -135,4 +137,5 @@ export const DEFAULT_LLM_SETTINGS: LlmSettings = {
   baseUrl: 'https://api.anthropic.com',
   apiKey: '',
   model: 'claude-sonnet-4-6',
+  autoLibrarian: false,
 };

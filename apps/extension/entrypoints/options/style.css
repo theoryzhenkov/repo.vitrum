@@ -171,3 +171,22 @@ code {
   font-size: 13.5px;
   line-height: 1.9;
 }
+
+.toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #ececf1;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #4a4a55;
+  cursor: pointer;
+}
+
+.toggle input {
+  width: auto;
+  margin-top: 2px;
+  accent-color: #6d5ce7;
+}

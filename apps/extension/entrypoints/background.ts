@@ -1,6 +1,6 @@
 import type { Annotation, Reaction, ReactionKind } from '@vitrum/model';
 import { browser } from 'wxt/browser';
-import { buildAgentPrompt } from '@/lib/agents';
+import { buildAgentPrompt, librarianHasMaterial } from '@/lib/agents';
 import { db, ensureBaseData } from '@/lib/db';
 import { getSettings, setSettings, streamCompletion, testCompletion } from '@/lib/llm';
 import {
@@ -33,7 +33,17 @@ export default defineBackground(() => {
     port.onMessage.addListener((raw) => {
       const msg = raw as AgentInvoke;
       if (msg.type !== 'invoke') return;
-      void runAgent(msg, port);
+      const session: AgentSession = {
+        pending: 0,
+        post: (event) => {
+          try {
+            port.postMessage(event);
+          } catch {
+            // port closed (tab navigated) — keep generating so results persist
+          }
+        },
+      };
+      void runAgentCascade(msg, session, 0, new Set());
     });
   });
 
@@ -249,17 +259,42 @@ const handlers: Handlers = {
   },
 };
 
-async function runAgent(invoke: AgentInvoke, port: { postMessage: (msg: AgentEvent) => void }): Promise<void> {
+interface AgentSession {
+  pending: number;
+  post: (event: AgentEvent) => void;
+}
+
+/** Agents may @mention each other; chains cap at this depth past the user's ask. */
+const MAX_AGENT_DEPTH = 2;
+
+async function runAgentCascade(
+  invoke: AgentInvoke,
+  session: AgentSession,
+  depth: number,
+  visited: Set<string>,
+): Promise<void> {
+  session.pending++; // incremented synchronously, before any await — keeps the all-done accounting sound
+  let announced = false;
   try {
     await ensureBaseData();
+
+    // Unprompted invocations only run when enabled AND the library genuinely connects.
+    if (invoke.auto) {
+      const settings = await getSettings();
+      if (!settings.autoLibrarian) return;
+      if (!(await librarianHasMaterial(invoke.quote ?? ''))) return;
+    }
+
+    session.post({ type: 'start', agentId: invoke.agentId, parentId: invoke.parentId });
+    announced = true;
+
     const { agent, system, user } = await buildAgentPrompt(invoke);
-    const body = await streamCompletion({ system, user }, (text) => {
-      try {
-        port.postMessage({ type: 'chunk', text });
-      } catch {
-        // port closed mid-stream (tab navigated) — keep generating so we still persist
-      }
-    });
+    const body = (
+      await streamCompletion({ system, user }, (text) =>
+        session.post({ type: 'chunk', agentId: agent.id, parentId: invoke.parentId, text }),
+      )
+    ).trim();
+
     const annotation: Annotation = {
       id: id(),
       pageUrl: invoke.pageUrl,
@@ -268,21 +303,71 @@ async function runAgent(invoke: AgentInvoke, port: { postMessage: (msg: AgentEve
       parentId: invoke.parentId,
       target: null,
       quote: null,
-      body: body.trim(),
+      body,
       motivation: 'comment',
       createdAt: Date.now(),
     };
     await db.annotations.add(annotation);
-    try {
-      port.postMessage({ type: 'done', annotation });
-    } catch {
-      /* port closed */
+    session.post({ type: 'done', agentId: agent.id, parentId: invoke.parentId, annotation });
+
+    // The multi-agent moment: an agent @mentioning a peer summons them.
+    if (depth < MAX_AGENT_DEPTH) {
+      const nextVisited = new Set(visited);
+      nextVisited.add(agent.id);
+      const peers = (await db.users.where('kind').equals('agent').toArray()).filter(
+        (u) => !nextVisited.has(u.id),
+      );
+      const handles = new Set(
+        Array.from(body.matchAll(/@([a-zA-Z0-9_]+)/g), (m) => m[1]!.toLowerCase()),
+      );
+      const summoned = peers.filter((p) => handles.has(p.handle.toLowerCase())).slice(0, 2);
+      if (summoned.length > 0) {
+        const chain = await ancestorChain(annotation.id);
+        const users = new Map((await db.users.toArray()).map((u) => [u.id, u] as const));
+        const thread = chain
+          .filter((a) => a.body)
+          .map((a) => ({ author: users.get(a.authorId)?.handle ?? 'unknown', body: a.body }));
+        for (const peer of summoned) {
+          void runAgentCascade(
+            {
+              type: 'invoke',
+              agentId: peer.id,
+              parentId: annotation.id,
+              pageUrl: invoke.pageUrl,
+              pageTitle: invoke.pageTitle,
+              quote: invoke.quote,
+              instruction: `@${agent.handle} mentioned you in this thread — respond to what they raised.`,
+              excerpt: invoke.excerpt,
+              thread,
+            },
+            session,
+            depth + 1,
+            nextVisited,
+          );
+        }
+      }
     }
   } catch (err) {
-    try {
-      port.postMessage({ type: 'error', message: err instanceof Error ? err.message : String(err) });
-    } catch {
-      /* port closed */
+    if (announced) {
+      session.post({
+        type: 'error',
+        agentId: invoke.agentId,
+        parentId: invoke.parentId,
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
+  } finally {
+    session.pending--;
+    if (session.pending === 0) session.post({ type: 'all-done' });
   }
+}
+
+async function ancestorChain(annotationId: string): Promise<Annotation[]> {
+  const chain: Annotation[] = [];
+  let cursor = await db.annotations.get(annotationId);
+  while (cursor) {
+    chain.unshift(cursor);
+    cursor = cursor.parentId ? await db.annotations.get(cursor.parentId) : undefined;
+  }
+  return chain;
 }

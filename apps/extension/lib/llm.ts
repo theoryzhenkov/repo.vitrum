@@ -44,6 +44,14 @@ export async function streamCompletion(
   let full = '';
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
+  const think = createThinkFilter();
+  const emit = (raw: string) => {
+    const clean = think.push(raw);
+    if (clean) {
+      full += clean;
+      onChunk(clean);
+    }
+  };
   let buffer = '';
   for (;;) {
     const { done, value } = await reader.read();
@@ -55,7 +63,7 @@ export async function streamCompletion(
       buffer = buffer.slice(newlineIdx + 1);
       if (!line.startsWith('data:')) continue;
       const data = line.slice(5).trim();
-      if (data === '[DONE]') return full;
+      if (data === '[DONE]') return full + think.flush();
       let json: unknown;
       try {
         json = JSON.parse(data);
@@ -63,13 +71,72 @@ export async function streamCompletion(
         continue;
       }
       const delta = extractDelta(settings.provider, json);
-      if (delta) {
-        full += delta;
-        onChunk(delta);
-      }
+      if (delta) emit(delta);
     }
   }
-  return full;
+  return full + think.flush();
+}
+
+/**
+ * Strips <think>…</think> spans from a streamed text, across chunk boundaries.
+ * Reasoning models served over OpenAI-compatible APIs (Ollama's qwen3,
+ * DeepSeek-R1 distills, …) interleave their chain of thought this way; a
+ * margin comment must never leak it. Anthropic thinking arrives as separate
+ * thinking_delta events, which extractDelta already ignores.
+ */
+function createThinkFilter(): { push: (chunk: string) => string; flush: () => string } {
+  let inThink = false;
+  let carry = '';
+  const OPEN = '<think>';
+  const CLOSE = '</think>';
+
+  const partialSuffix = (text: string, tag: string): number => {
+    for (let n = Math.min(tag.length - 1, text.length); n > 0; n--) {
+      if (text.endsWith(tag.slice(0, n))) return n;
+    }
+    return 0;
+  };
+
+  return {
+    push(chunk: string): string {
+      let text = carry + chunk;
+      carry = '';
+      let out = '';
+      while (text.length > 0) {
+        if (inThink) {
+          const end = text.indexOf(CLOSE);
+          if (end === -1) {
+            const keep = partialSuffix(text, CLOSE);
+            carry = keep > 0 ? text.slice(-keep) : '';
+            text = '';
+          } else {
+            inThink = false;
+            text = text.slice(end + CLOSE.length);
+            // drop whitespace the model left after its reasoning block
+            if (out === '') text = text.replace(/^\s+/, '');
+          }
+        } else {
+          const start = text.indexOf(OPEN);
+          if (start === -1) {
+            const keep = partialSuffix(text, OPEN);
+            out += keep > 0 ? text.slice(0, -keep) : text;
+            carry = keep > 0 ? text.slice(-keep) : '';
+            text = '';
+          } else {
+            out += text.slice(0, start);
+            inThink = true;
+            text = text.slice(start + OPEN.length);
+          }
+        }
+      }
+      return out;
+    },
+    flush(): string {
+      const rest = inThink ? '' : carry;
+      carry = '';
+      return rest;
+    },
+  };
 }
 
 /** One-shot non-streaming completion; used by the settings "test connection" button. */

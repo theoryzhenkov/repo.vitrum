@@ -280,27 +280,40 @@ export function App() {
   );
 
   const invokeAgent = useCallback(
-    (agent: User, root: Annotation, attachToId: string, instruction: string, context: Annotation[]) => {
+    (
+      agent: User,
+      root: Annotation,
+      attachToId: string,
+      instruction: string,
+      context: Annotation[],
+      opts: { auto?: boolean } = {},
+    ) => {
+      // One port per invoke, but the background may cascade (agents summoning
+      // agents), so every event carries its (parentId, agentId) stream key.
       const port = browser.runtime.connect({ name: AGENT_PORT });
-      setStreams((all) => [...all, { parentId: attachToId, agentId: agent.id, text: '' }]);
-      const finish = () =>
-        setStreams((all) => all.filter((s) => !(s.parentId === attachToId && s.agentId === agent.id)));
+      const drop = (parentId: string, agentId: string) =>
+        setStreams((all) => all.filter((s) => !(s.parentId === parentId && s.agentId === agentId)));
 
       port.onMessage.addListener((raw) => {
         const event = raw as AgentEvent;
-        if (event.type === 'chunk') {
+        if (event.type === 'start') {
+          setStreams((all) => [...all, { parentId: event.parentId, agentId: event.agentId, text: '' }]);
+        } else if (event.type === 'chunk') {
           setStreams((all) =>
             all.map((s) =>
-              s.parentId === attachToId && s.agentId === agent.id ? { ...s, text: s.text + event.text } : s,
+              s.parentId === event.parentId && s.agentId === event.agentId
+                ? { ...s, text: s.text + event.text }
+                : s,
             ),
           );
         } else if (event.type === 'done') {
-          finish();
+          drop(event.parentId, event.agentId);
           void refresh();
-          port.disconnect();
+          if (opts.auto) notify('@librarian connected this to something you saved — see the pill');
         } else if (event.type === 'error') {
-          finish();
-          notify(`@${agent.handle}: ${event.message}`);
+          drop(event.parentId, event.agentId);
+          if (!opts.auto) notify(event.message);
+        } else if (event.type === 'all-done') {
           port.disconnect();
         }
       });
@@ -320,9 +333,11 @@ export function App() {
             author: usersById.get(a.authorId)?.handle ?? 'unknown',
             body: a.body,
           })),
+        auto: opts.auto,
       };
       port.postMessage(invoke);
-      setActiveThread(root.id);
+      // Unprompted agents stay quiet: no card, just the pill updating.
+      if (!opts.auto) setActiveThread(root.id);
     },
     [pageUrl, usersById, refresh, notify],
   );
@@ -379,8 +394,29 @@ export function App() {
         setTimeout(() => setFlashRect(null), 1400);
       }
       await refresh();
+      // Opt-in: librarian reacts to the save when the library connects.
+      // The background double-gates on settings + actual related material.
+      try {
+        const settings = await send('settings:get', {});
+        if (settings.autoLibrarian) {
+          const librarian = stateRef.current.users.find((u) => u.kind === 'agent' && u.handle === 'librarian');
+          if (librarian) {
+            invokeAgent(
+              librarian,
+              annotation,
+              annotation.id,
+              'The user just saved this passage (this is an automatic invocation, they did not ask you). ' +
+                'Share the single strongest genuine connection to their library in one or two sentences.',
+              [annotation],
+              { auto: true },
+            );
+          }
+        }
+      } catch {
+        /* settings unavailable — skip the nicety */
+      }
     },
-    [newAnnotation, refresh],
+    [newAnnotation, refresh, invokeAgent],
   );
 
   const saveSelectionNow = useCallback(async () => {

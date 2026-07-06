@@ -73,12 +73,19 @@ export interface AgentInvoke {
   instruction: string;
   excerpt: string;
   thread: { author: string; body: string }[];
+  /** Unprompted invocation (e.g. librarian reacting to a save): the background
+      gates it on settings + whether there's genuinely related material. */
+  auto?: boolean;
 }
 
+/** One invoke can fan out into a capped cascade (agents mentioning agents),
+    so every event names its (parentId, agentId) stream. */
 export type AgentEvent =
-  | { type: 'chunk'; text: string }
-  | { type: 'done'; annotation: Annotation }
-  | { type: 'error'; message: string };
+  | { type: 'start'; agentId: string; parentId: string }
+  | { type: 'chunk'; agentId: string; parentId: string; text: string }
+  | { type: 'done'; agentId: string; parentId: string; annotation: Annotation }
+  | { type: 'error'; agentId: string; parentId: string; message: string }
+  | { type: 'all-done' };
 
 // ----------------------------------------- background/popup → tab pushes
 

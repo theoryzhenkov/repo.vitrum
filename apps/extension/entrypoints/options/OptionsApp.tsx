@@ -154,8 +154,19 @@ export function OptionsApp() {
         </ul>
         <p className="hint">
           Mention any of them in a comment — e.g. <code>@skeptic check this claim</code> — and they reply in the
-          thread, anchored to the same spot on the page.
+          thread, anchored to the same spot on the page. Agents can pull each other in when it genuinely helps.
         </p>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={settings.autoLibrarian}
+            onChange={(e) => update({ autoLibrarian: e.target.checked })}
+          />
+          <span>
+            <b>@librarian reacts to your saves.</b> When you save a passage that genuinely connects to something
+            already in your library, the librarian comments on it unprompted. (Remember to Save above.)
+          </span>
+        </label>
       </section>
     </div>
   );

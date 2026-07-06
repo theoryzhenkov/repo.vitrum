@@ -2,18 +2,30 @@ import type { User } from '@vitrum/model';
 import { db } from './db';
 import type { AgentInvoke } from './messages';
 
-const HOUSE_RULES = (agent: User) =>
-  `\n\nYou are ${agent.name} (@${agent.handle}), an AI member of the user's reading network in Vitrum. ` +
-  'You are commenting inline on a web page the user is reading. Rules: respond directly to what was asked; ' +
-  'ground your reply in the provided excerpt and highlighted text; stay under 120 words unless the task ' +
-  'genuinely needs more; write plain conversational prose — no headers, no bullet lists unless asked; ' +
-  'it is fine to disagree with the page or the user; never invent sources or claim to have browsed anywhere.';
+const HOUSE_RULES = (agent: User, peers: User[]) => {
+  const peerLine =
+    peers.length > 0
+      ? ` Other agents in this network: ${peers.map((p) => `@${p.handle}`).join(', ')}. ` +
+        "If another agent's perspective would genuinely strengthen the thread, you may @mention " +
+        'exactly one of them at the end of your reply and they will respond — use this sparingly, ' +
+        'only when it truly adds something.'
+      : '';
+  return (
+    `\n\nYou are ${agent.name} (@${agent.handle}), an AI member of the user's reading network in Vitrum. ` +
+    'You are commenting inline on a web page the user is reading. Rules: respond directly to what was asked; ' +
+    'ground your reply in the provided excerpt and highlighted text; stay under 120 words unless the task ' +
+    'genuinely needs more; write plain conversational prose — no headers, no bullet lists unless asked; ' +
+    'it is fine to disagree with the page or the user; never invent sources or claim to have browsed anywhere.' +
+    peerLine
+  );
+};
 
 export async function buildAgentPrompt(
   invoke: AgentInvoke,
 ): Promise<{ agent: User; system: string; user: string }> {
   const agent = await db.users.get(invoke.agentId);
   if (!agent || agent.kind !== 'agent') throw new Error(`Unknown agent: ${invoke.agentId}`);
+  const peers = (await db.users.where('kind').equals('agent').toArray()).filter((u) => u.id !== agent.id);
 
   const parts: string[] = [
     `Page: ${invoke.pageTitle} (${invoke.pageUrl})`,
@@ -44,9 +56,19 @@ export async function buildAgentPrompt(
 
   return {
     agent,
-    system: (agent.persona ?? '') + HOUSE_RULES(agent),
+    system: (agent.persona ?? '') + HOUSE_RULES(agent, peers),
     user: parts.join('\n'),
   };
+}
+
+/**
+ * Gate for unprompted librarian invocations: only worth interrupting the user
+ * when the library actually holds something related.
+ */
+export async function librarianHasMaterial(quote: string): Promise<boolean> {
+  if (!quote || quote.length < 24) return false;
+  const top = await libraryCandidates(quote);
+  return top.length > 0 && top[0]!.score >= 0.15;
 }
 
 // ------------------------------------------- librarian: related saved items
@@ -69,8 +91,8 @@ function overlap(a: Set<string>, b: Set<string>): number {
   return shared / Math.sqrt(a.size * b.size);
 }
 
-async function libraryContext(quote: string, instruction: string): Promise<string> {
-  const queryTokens = tokens(`${quote} ${instruction}`);
+export async function libraryCandidates(query: string): Promise<{ text: string; score: number }[]> {
+  const queryTokens = tokens(query);
 
   const mine = await db.annotations.where('authorId').equals('me').reverse().sortBy('createdAt');
   const items = await db.listItems.toArray();
@@ -88,10 +110,14 @@ async function libraryContext(quote: string, instruction: string): Promise<strin
     });
   }
 
-  const top = candidates
+  return candidates
     .filter((c) => c.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 10);
+}
+
+async function libraryContext(quote: string, instruction: string): Promise<string> {
+  const top = await libraryCandidates(`${quote} ${instruction}`);
 
   if (top.length === 0) {
     return "Excerpts from the user's library: (nothing obviously related was found — say so honestly).";

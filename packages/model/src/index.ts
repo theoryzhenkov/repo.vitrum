@@ -77,7 +77,7 @@ export interface Annotation {
   pageUrl: string;
   pageTitle: string;
   authorId: string;
-  /** Root annotations have parentId === null; replies point at the root. */
+  /** Roots have parentId === null; replies point at ANY annotation (nested threads). */
   parentId: string | null;
   /** null → about the page as a whole. */
   target: Target | null;
@@ -85,6 +85,19 @@ export interface Annotation {
   quote: string | null;
   body: string;
   motivation: Motivation;
+  createdAt: number;
+}
+
+// --------------------------------------------------------------- reactions
+
+/** LessWrong-style inline reacts. up/down and agree/disagree are exclusive pairs. */
+export type ReactionKind = 'up' | 'down' | 'agree' | 'disagree' | 'insightful' | 'delta';
+
+export interface Reaction {
+  id: string;
+  annotationId: string;
+  userId: string;
+  kind: ReactionKind;
   createdAt: number;
 }
 

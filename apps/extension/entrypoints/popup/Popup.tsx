@@ -53,10 +53,26 @@ export function Popup() {
     await savePage(list.id);
   }
 
-  function toTab(cmd: TabCommand) {
+  // Await everything before window.close() — closing the popup kills its JS
+  // context, and a fire-and-forget message can die before it's dispatched.
+  async function toTab(cmd: TabCommand) {
     if (tab?.id !== undefined) {
-      void browser.tabs.sendMessage(tab.id, cmd).catch(() => {});
+      try {
+        await browser.tabs.sendMessage(tab.id, cmd);
+      } catch {
+        /* no content script on this page */
+      }
     }
+    window.close();
+  }
+
+  async function openLibrary() {
+    await browser.tabs.create({ url: browser.runtime.getURL('/library.html') });
+    window.close();
+  }
+
+  async function openSettings() {
+    await browser.runtime.openOptionsPage();
     window.close();
   }
 
@@ -101,7 +117,7 @@ export function Popup() {
         </div>
       )}
 
-      <button className="row" disabled={!onPage} onClick={() => toTab({ type: 'element-picker' })}>
+      <button className="row" disabled={!onPage} onClick={() => void toTab({ type: 'element-picker' })}>
         <SquareDashedMousePointer size={15} />
         <span>Annotate element</span>
         <span className="hint">Alt+E</span>
@@ -109,30 +125,18 @@ export function Popup() {
 
       <div className="sep" />
 
-      <button
-        className="row"
-        onClick={() => {
-          void send('open-library', {});
-          window.close();
-        }}
-      >
+      <button className="row" onClick={() => void openLibrary()}>
         <Library size={15} />
         <span>Library</span>
       </button>
-      <button
-        className="row"
-        onClick={() => {
-          void send('open-options', {});
-          window.close();
-        }}
-      >
+      <button className="row" onClick={() => void openSettings()}>
         <Settings size={15} />
         <span>Settings</span>
       </button>
 
       <div className="sep" />
 
-      <button className="row muted" disabled={!onPage} onClick={() => toTab({ type: 'seed-demo' })}>
+      <button className="row muted" disabled={!onPage} onClick={() => void toTab({ type: 'seed-demo' })}>
         <Sprout size={15} />
         <span>Seed demo activity</span>
       </button>

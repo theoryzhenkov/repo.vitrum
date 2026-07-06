@@ -20,7 +20,23 @@ export function PageIndex({ state, anchoredIds, onOpen }: Props) {
   const roots = state.annotations
     .filter((a) => a.parentId === null)
     .sort((a, b) => b.createdAt - a.createdAt);
-  const replyCount = (rootId: string) => state.annotations.filter((a) => a.parentId === rootId).length;
+  const childrenOf = new Map<string, string[]>();
+  for (const a of state.annotations) {
+    if (!a.parentId) continue;
+    const kids = childrenOf.get(a.parentId) ?? [];
+    kids.push(a.id);
+    childrenOf.set(a.parentId, kids);
+  }
+  const replyCount = (rootId: string) => {
+    let count = 0;
+    const stack = [...(childrenOf.get(rootId) ?? [])];
+    while (stack.length > 0) {
+      const nodeId = stack.pop()!;
+      count++;
+      stack.push(...(childrenOf.get(nodeId) ?? []));
+    }
+    return count;
+  };
 
   return (
     <div className="vt-index" data-vitrum-ui="1">

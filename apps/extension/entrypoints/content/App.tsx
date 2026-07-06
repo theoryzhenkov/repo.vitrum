@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Diamond } from 'lucide-react';
-import type { Annotation, User } from '@vitrum/model';
+import type { Annotation, ReactionKind, User } from '@vitrum/model';
 import {
   anchorTarget,
   describeElement,
@@ -29,7 +29,7 @@ import { PageIndex } from './components/PageIndex';
 import { SelectionPopover } from './components/SelectionPopover';
 import { ThreadPopover } from './components/ThreadPopover';
 
-const EMPTY_STATE: PageState = { annotations: [], users: [], lists: [], itemsForPage: [] };
+const EMPTY_STATE: PageState = { annotations: [], users: [], lists: [], itemsForPage: [], reactions: [] };
 
 export function App() {
   const [pageUrl, setPageUrl] = useState(() => normalizeUrl(location.href));
@@ -131,6 +131,34 @@ export function App() {
 
   // ---- Paint text highlights grouped by author kind.
   const usersById = useMemo(() => new Map(state.users.map((u) => [u.id, u] as const)), [state.users]);
+  const annotationsById = useMemo(
+    () => new Map(state.annotations.map((a) => [a.id, a] as const)),
+    [state.annotations],
+  );
+  const childrenOf = useMemo(() => {
+    const map = new Map<string, Annotation[]>();
+    for (const a of state.annotations) {
+      if (!a.parentId) continue;
+      const siblings = map.get(a.parentId) ?? [];
+      siblings.push(a);
+      map.set(a.parentId, siblings);
+    }
+    return map;
+  }, [state.annotations]);
+  const subtreeOf = useCallback(
+    (rootId: string): Annotation[] => {
+      const out: Annotation[] = [];
+      const stack = [...(childrenOf.get(rootId) ?? [])];
+      while (stack.length > 0) {
+        const a = stack.pop()!;
+        out.push(a);
+        const kids = childrenOf.get(a.id);
+        if (kids) stack.push(...kids);
+      }
+      return out;
+    },
+    [childrenOf],
+  );
   useEffect(() => {
     const groups: Record<'mine' | 'friend' | 'agent', Range[]> = { mine: [], friend: [], agent: [] };
     for (const a of state.annotations) {
@@ -252,18 +280,18 @@ export function App() {
   );
 
   const invokeAgent = useCallback(
-    (agent: User, root: Annotation, instruction: string, replies: Annotation[]) => {
+    (agent: User, root: Annotation, attachToId: string, instruction: string, context: Annotation[]) => {
       const port = browser.runtime.connect({ name: AGENT_PORT });
-      setStreams((all) => [...all, { parentId: root.id, agentId: agent.id, text: '' }]);
+      setStreams((all) => [...all, { parentId: attachToId, agentId: agent.id, text: '' }]);
       const finish = () =>
-        setStreams((all) => all.filter((s) => !(s.parentId === root.id && s.agentId === agent.id)));
+        setStreams((all) => all.filter((s) => !(s.parentId === attachToId && s.agentId === agent.id)));
 
       port.onMessage.addListener((raw) => {
         const event = raw as AgentEvent;
         if (event.type === 'chunk') {
           setStreams((all) =>
             all.map((s) =>
-              s.parentId === root.id && s.agentId === agent.id ? { ...s, text: s.text + event.text } : s,
+              s.parentId === attachToId && s.agentId === agent.id ? { ...s, text: s.text + event.text } : s,
             ),
           );
         } else if (event.type === 'done') {
@@ -280,16 +308,18 @@ export function App() {
       const invoke: AgentInvoke = {
         type: 'invoke',
         agentId: agent.id,
-        parentId: root.id,
+        parentId: attachToId,
         pageUrl,
         pageTitle: document.title,
         quote: root.quote,
         instruction,
         excerpt: pageExcerpt(),
-        thread: [root, ...replies].map((a) => ({
-          author: usersById.get(a.authorId)?.handle ?? 'unknown',
-          body: a.body,
-        })),
+        thread: context
+          .filter((a) => a.body)
+          .map((a) => ({
+            author: usersById.get(a.authorId)?.handle ?? 'unknown',
+            body: a.body,
+          })),
       };
       port.postMessage(invoke);
       setActiveThread(root.id);
@@ -306,20 +336,27 @@ export function App() {
   );
 
   const submitReply = useCallback(
-    async (root: Annotation, body: string) => {
+    async (root: Annotation, parent: Annotation, body: string) => {
       const reply = newAnnotation({
         target: null,
         quote: null,
         body: body.trim(),
         motivation: 'comment',
-        parentId: root.id,
+        parentId: parent.id,
       });
       await send('annotation:create', { annotation: reply });
       await refresh();
-      const replies = stateRef.current.annotations.filter((a) => a.parentId === root.id);
-      for (const agent of mentionedAgents(body)) invokeAgent(agent, root, body.trim(), replies);
+      // Context for agents: the ancestor chain down to this reply.
+      const chain: Annotation[] = [reply];
+      let cursor: Annotation | undefined = parent;
+      while (cursor) {
+        chain.unshift(cursor);
+        cursor = cursor.parentId ? annotationsById.get(cursor.parentId) : undefined;
+      }
+      // Mentioned agents reply nested under the message that asked them.
+      for (const agent of mentionedAgents(body)) invokeAgent(agent, root, reply.id, body.trim(), chain);
     },
-    [newAnnotation, refresh, mentionedAgents, invokeAgent],
+    [newAnnotation, refresh, mentionedAgents, invokeAgent, annotationsById],
   );
 
   const addHighlight = useCallback(
@@ -383,6 +420,14 @@ export function App() {
       await toggleAnnotationList(annotationId, list.id, null);
     },
     [toggleAnnotationList],
+  );
+
+  const toggleReaction = useCallback(
+    async (annotationId: string, kind: ReactionKind) => {
+      await send('reaction:toggle', { annotationId, kind });
+      await refresh();
+    },
+    [refresh],
   );
 
   const deleteAnnotation = useCallback(
@@ -462,10 +507,7 @@ export function App() {
   const pills: PillInfo[] = roots.flatMap((root) => {
     const result = anchored.get(root.id);
     if (!result) return [];
-    const authorIds = [
-      root.authorId,
-      ...state.annotations.filter((a) => a.parentId === root.id).map((a) => a.authorId),
-    ];
+    const authorIds = [root.authorId, ...subtreeOf(root.id).map((a) => a.authorId)];
     const participants: User[] = [];
     for (const authorId of authorIds) {
       const user = usersById.get(authorId);
@@ -501,17 +543,18 @@ export function App() {
 
       {activeRoot && (
         <ThreadPopover
+          key={activeRoot.id}
           root={activeRoot}
-          replies={state.annotations
-            .filter((a) => a.parentId === activeRoot.id)
-            .sort((a, b) => a.createdAt - b.createdAt)}
+          annotations={state.annotations}
           users={usersById}
-          streams={streams.filter((s) => s.parentId === activeRoot.id)}
+          streams={streams}
+          reactions={state.reactions}
           rect={activeRect}
           lists={state.lists}
           items={state.itemsForPage.filter((i) => i.annotationId === activeRoot.id)}
-          onReply={(body) => void submitReply(activeRoot, body)}
+          onReply={(parent, body) => void submitReply(activeRoot, parent, body)}
           onDelete={(annotationId) => void deleteAnnotation(annotationId)}
+          onToggleReaction={(annotationId, kind) => void toggleReaction(annotationId, kind)}
           onToggleList={(listId, existing) => void toggleAnnotationList(activeRoot.id, listId, existing)}
           onCreateListAndSave={(name) => void createListAndSaveAnnotation(activeRoot.id, name)}
           onClose={() => setActiveThread(null)}

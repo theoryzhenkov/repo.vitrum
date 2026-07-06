@@ -1,4 +1,4 @@
-import type { Annotation } from '@vitrum/model';
+import type { Annotation, Reaction, ReactionKind } from '@vitrum/model';
 import { browser } from 'wxt/browser';
 import { buildAgentPrompt } from '@/lib/agents';
 import { db, ensureBaseData } from '@/lib/db';
@@ -71,7 +71,11 @@ const handlers: Handlers = {
       db.lists.orderBy('createdAt').toArray(),
       db.listItems.where('pageUrl').equals(pageUrl).toArray(),
     ]);
-    return { annotations, users, lists, itemsForPage };
+    const reactions = await db.reactions
+      .where('annotationId')
+      .anyOf(annotations.map((a) => a.id))
+      .toArray();
+    return { annotations, users, lists, itemsForPage, reactions };
   },
 
   'annotation:create': async ({ annotation }) => {
@@ -80,11 +84,41 @@ const handlers: Handlers = {
   },
 
   'annotation:delete': async ({ id: annotationId }) => {
-    await db.transaction('rw', db.annotations, db.listItems, async () => {
-      await db.annotations.delete(annotationId);
-      await db.annotations.where('parentId').equals(annotationId).delete();
-      await db.listItems.where('annotationId').equals(annotationId).delete();
+    await db.transaction('rw', db.annotations, db.listItems, db.reactions, async () => {
+      // Collect the full reply subtree — threads nest arbitrarily deep.
+      const doomed = [annotationId];
+      let frontier = [annotationId];
+      while (frontier.length > 0) {
+        const children = await db.annotations.where('parentId').anyOf(frontier).primaryKeys();
+        doomed.push(...children);
+        frontier = children;
+      }
+      await db.annotations.bulkDelete(doomed);
+      await db.reactions.where('annotationId').anyOf(doomed).delete();
+      await db.listItems.where('annotationId').anyOf(doomed).delete();
     });
+  },
+
+  'reaction:toggle': async ({ annotationId, kind }) => {
+    const EXCLUSIVE: Partial<Record<ReactionKind, ReactionKind>> = {
+      up: 'down',
+      down: 'up',
+      agree: 'disagree',
+      disagree: 'agree',
+    };
+    const mine = await db.reactions
+      .where('[annotationId+userId]')
+      .equals([annotationId, 'me'])
+      .toArray();
+    const same = mine.find((r) => r.kind === kind);
+    if (same) {
+      await db.reactions.delete(same.id);
+      return;
+    }
+    const opposite = EXCLUSIVE[kind];
+    const conflicting = opposite ? mine.find((r) => r.kind === opposite) : undefined;
+    if (conflicting) await db.reactions.delete(conflicting.id);
+    await db.reactions.add({ id: id(), annotationId, userId: 'me', kind, createdAt: Date.now() });
   },
 
   'list:create': async ({ name }) => {
@@ -132,6 +166,7 @@ const handlers: Handlers = {
       .filter((a) => friendIds.includes(a.authorId))
       .primaryKeys();
     await db.annotations.bulkDelete(stale);
+    await db.reactions.where('annotationId').anyOf(stale).delete();
 
     const now = Date.now();
     const rows: Annotation[] = [];
@@ -167,6 +202,26 @@ const handlers: Handlers = {
       }
     });
     await db.annotations.bulkAdd(rows);
+
+    // A little reaction activity makes seeded threads feel lived-in.
+    const kinds: ReactionKind[] = ['up', 'agree', 'insightful'];
+    const reactionRows: Reaction[] = [];
+    rows
+      .filter((r) => r.parentId === null)
+      .forEach((root, i) => {
+        const others = FRIENDS.filter((f) => f.id !== root.authorId);
+        const n = (root.quote?.length ?? 0) % 3; // 0–2, stable per quote
+        for (let k = 0; k < n; k++) {
+          reactionRows.push({
+            id: id(),
+            annotationId: root.id,
+            userId: others[k % others.length]!.id,
+            kind: kinds[(i + k) % kinds.length]!,
+            createdAt: root.createdAt + 600_000,
+          });
+        }
+      });
+    await db.reactions.bulkAdd(reactionRows);
   },
 
   'settings:get': () => getSettings(),

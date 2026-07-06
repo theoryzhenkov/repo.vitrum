@@ -44,6 +44,10 @@ press a shortcut, or the page already carries annotations.
 - [x] Element badges → small dots
 - [x] Lucide icons throughout (no emojis / ad-hoc glyphs)
 - [x] Remove sidebar → toolbar popup + presence-chip index dropdown
+- [x] Fix popup race: Settings/Library never opened (window.close() killed the message)
+- [x] Nested threads: reply to any comment, agents attach under the message that asked
+- [x] Thread card: draggable by header (unpins), resizable via native grip
+- [x] LessWrong-style reacts (▲▼ ✓✗ 💡 Δ): hover palette, chips only where reactions exist
 - [x] Pin the thread card (Esc/close to dismiss, page clicks don't kill it)
 - [x] Save feedback: highlight pulse + pill scale-in; Alt+S quick save
 - [x] Rail jitter: MutationObserver re-anchor + ResizeObserver reflow tracking

@@ -1,4 +1,4 @@
-import type { Annotation, List, ListItem, LlmSettings, Target, User } from '@vitrum/model';
+import type { Annotation, List, ListItem, LlmSettings, Reaction, ReactionKind, Target, User } from '@vitrum/model';
 import { browser } from 'wxt/browser';
 
 export interface PageState {
@@ -6,6 +6,7 @@ export interface PageState {
   users: User[];
   lists: List[];
   itemsForPage: ListItem[];
+  reactions: Reaction[];
 }
 
 export interface LibraryState {
@@ -25,6 +26,7 @@ export interface Protocol {
   'page:get-state': { req: { pageUrl: string }; res: PageState };
   'annotation:create': { req: { annotation: Annotation }; res: Annotation };
   'annotation:delete': { req: { id: string }; res: void };
+  'reaction:toggle': { req: { annotationId: string; kind: ReactionKind }; res: void };
   'list:create': { req: { name: string }; res: List };
   'list:save': {
     req: { listId: string; pageUrl: string; pageTitle: string; annotationId: string | null };
@@ -63,7 +65,7 @@ export const AGENT_PORT = 'vitrum-agent';
 export interface AgentInvoke {
   type: 'invoke';
   agentId: string;
-  /** Root annotation the reply should attach to. */
+  /** Annotation the agent's reply attaches to (any node in the thread tree). */
   parentId: string;
   pageUrl: string;
   pageTitle: string;
